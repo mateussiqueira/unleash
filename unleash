@@ -1,0 +1,263 @@
+#!/bin/bash
+set -euo pipefail
+
+# unleash — Unified MDM bypass tool for macOS.
+# One script to rule them all: bypass, suppress, backup, restore, dualboot, status.
+#
+# Usage:
+#   ./unleash                    Interactive menu (auto-detects Recovery/dualboot)
+#   ./unleash bypass             Full bypass (create admin + suppress)
+#   ./unleash suppress           Suppress-only (no user created)
+#   ./unleash backup             Backup current state
+#   ./unleash restore            Restore from backup
+#   ./unleash dualboot           Target a different volume (needs sudo)
+#   ./unleash status             Check current MDM status
+#   ./unleash version            Show version
+#
+# Put this on an external SSD and run from Recovery.
+# No curl, no downloads, no typing URLs.
+
+VERSION="1.0.0"
+
+# Determine script location (works with symlinks and source)
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+LIB_DIR="$SCRIPT_DIR/lib"
+
+# Source library modules
+for _lib in colors detect validate dscl suppress backup status; do
+	_lib_path="$LIB_DIR/$_lib.sh"
+	if [ -f "$_lib_path" ]; then
+		# shellcheck disable=SC1090
+		source "$_lib_path"
+	else
+		echo "ERROR: Library not found: $_lib_path" >&2
+		exit 1
+	fi
+done
+
+# ------------------------------------------------------------------
+# Command handlers
+# ------------------------------------------------------------------
+cmd_version() {
+	echo "unleash v$VERSION"
+	exit 0
+}
+
+cmd_bypass() {
+	if is_recovery; then
+		header "unleash — Full MDM Bypass"
+		local data_mount
+		data_mount=$(resolve_data_volume)
+		full_bypass_mode "$data_mount"
+	else
+		error_exit "Full bypass must run from Recovery mode."
+	fi
+}
+
+cmd_suppress() {
+	header "unleash — Suppress Enrollment Only"
+	local data_mount
+	data_mount=$(resolve_data_volume)
+	suppress_only_mode "$data_mount"
+}
+
+cmd_backup() {
+	header "unleash — Backup State"
+	local data_mount
+	data_mount=$(resolve_data_volume)
+	backup_state "$data_mount"
+}
+
+cmd_restore() {
+	header "unleash — Restore State"
+	restore_state
+}
+
+cmd_dualboot() {
+	header "unleash — Dual-Boot Mode"
+	if ! is_root; then
+		error_exit "Dual-boot mode requires sudo: sudo ./unleash dualboot"
+	fi
+
+	local volumes
+	volumes=$(resolve_target_volumes)
+	local sys_path="${volumes%%|*}"
+	local data_path="${volumes##*|}"
+
+	info "Target system: $sys_path"
+	info "Target data:   $data_path"
+
+	local node
+	node=$(dscl_node "$data_path")
+
+	echo ""
+	step "Creating admin account on target"
+
+	prompt_default realName "Full name" "Apple"
+
+	local username
+	prompt_username username
+
+	local passw
+	prompt_password passw
+
+	local uid
+	uid=$(find_available_uid "$node")
+
+	create_admin_user "$node" "$data_path" "$username" "$realName" "$passw" "$uid"
+	touch "$data_path/private/var/db/.AppleSetupDone"
+
+	step "Blocking domains on target..."
+	local hosts_file="$data_path/private/etc/hosts"
+	[ -f "$hosts_file" ] || touch "$hosts_file"
+	echo "0.0.0.0 deviceenrollment.apple.com" >>"$hosts_file"
+	echo "0.0.0.0 mdmenrollment.apple.com"    >>"$hosts_file"
+	echo "0.0.0.0 iprofiles.apple.com"        >>"$hosts_file"
+	success "MDM domains blocked"
+
+	local config_path="$data_path/private/var/db/ConfigurationProfiles/Settings"
+	mkdir -p "$config_path"
+	rm -f "$config_path/.cloudConfigHasActivationRecord" \
+	      "$config_path/.cloudConfigRecordFound"
+	touch "$config_path/.cloudConfigProfileInstalled" \
+	      "$config_path/.cloudConfigRecordNotFound"
+	success "Configuration profiles reset"
+
+	echo ""
+	echo -e "${GRN}============================================${NC}"
+	echo -e "${GRN}      Dual-Boot Bypass Applied                ${NC}"
+	echo -e "${GRN}============================================${NC}"
+	echo ""
+	echo -e "${CYAN}Boot into the target installation and login:${NC}"
+	echo -e "${YEL}  User: $username${NC}"
+	echo -e "${YEL}  Pass: $passw${NC}"
+}
+
+cmd_status() {
+	if is_recovery; then
+		local data_mount
+		data_mount=$(resolve_data_volume)
+		check_mdm_status "$data_mount"
+	else
+		error_exit "Status check must run from Recovery mode."
+	fi
+}
+
+cmd_interactive_recovery() {
+	header "unleash — Recovery Mode"
+
+	local data_mount
+	data_mount=$(resolve_data_volume)
+	echo ""
+
+	PS3="Choose an option: "
+	local options=(
+		"Full bypass (create admin + suppress MDM)"
+		"Suppress enrollment only (no user)"
+		"Backup current state"
+		"Restore from backup"
+		"Check MDM status"
+		"Reboot"
+		"Exit"
+	)
+	select opt in "${options[@]}"; do
+		case $opt in
+			"Full bypass (create admin + suppress MDM)")
+				full_bypass_mode "$data_mount"
+				echo -e "${CYAN}Reboot to apply changes.${NC}"
+				;;
+			"Suppress enrollment only (no user)")
+				suppress_only_mode "$data_mount"
+				;;
+			"Backup current state")
+				backup_state "$data_mount"
+				;;
+			"Restore from backup")
+				restore_state
+				;;
+			"Check MDM status")
+				check_mdm_status "$data_mount"
+				;;
+			"Reboot")
+				info "Rebooting..."
+				reboot
+				;;
+			"Exit")
+				exit 0
+				;;
+			*)
+				echo -e "${RED}Invalid option $REPLY${NC}"
+				;;
+		esac
+	done
+}
+
+cmd_interactive_normal() {
+	header "unleash"
+	echo -e "${YEL}Not in Recovery mode. Limited options.${NC}"
+	echo ""
+
+	PS3="Choose an option: "
+	local options=(
+		"Suppress enrollment only"
+		"Backup current state"
+		"Restore from backup"
+		"Exit"
+	)
+	select opt in "${options[@]}"; do
+		case $opt in
+			"Suppress enrollment only")
+				local data_mount
+				data_mount=$(resolve_data_volume)
+				suppress_only_mode "$data_mount"
+				;;
+			"Backup current state")
+				local data_mount
+				data_mount=$(resolve_data_volume)
+				backup_state "$data_mount"
+				;;
+			"Restore from backup")
+				restore_state
+				;;
+			"Exit")
+				exit 0
+				;;
+			*)
+				echo -e "${RED}Invalid option $REPLY${NC}"
+				;;
+		esac
+	done
+}
+
+# ------------------------------------------------------------------
+# CLI dispatch
+# ------------------------------------------------------------------
+main() {
+	case "${1:-}" in
+		bypass)    cmd_bypass ;;
+		suppress)  cmd_suppress ;;
+		backup)    cmd_backup ;;
+		restore)   cmd_restore ;;
+		dualboot)  cmd_dualboot ;;
+		status)    cmd_status ;;
+		version|-v|--version) cmd_version ;;
+		help|-h|--help)
+			head -30 "$0" | grep -E '^#   |^# \$'
+			exit 0
+			;;
+		"")
+			if is_recovery; then
+				cmd_interactive_recovery
+			else
+				cmd_interactive_normal
+			fi
+			;;
+		*)
+			echo -e "${RED}Unknown command: $1${NC}" >&2
+			echo "Usage: $0 {bypass|suppress|backup|restore|dualboot|status|version|help}" >&2
+			exit 1
+			;;
+	esac
+}
+
+main "$@"
