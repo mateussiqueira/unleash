@@ -11,6 +11,11 @@ set -euo pipefail
 #   ./unleash heal               Check and re-apply suppression (auto-heal)
 #   ./unleash persist            Install LaunchDaemon for boot-time persistence
 #   ./unleash unpersist          Remove the persistence LaunchDaemon
+#   ./unleash firewall           Block Apple MDM IP ranges via pf (kernel-level)
+#   ./unleash firewall-off       Remove pf firewall MDM block
+#   ./unleash harden             Live-OS hardening (kill MDM, remove profiles)
+#   ./unleash audit              Deep MDM audit (profiles, certs, agents, processes)
+#   ./unleash whitelist          Selective block (block MDM only, keep iCloud/App Store)
 #   ./unleash backup             Backup current state
 #   ./unleash restore            Restore from backup
 #   ./unleash dualboot           Target a different volume (needs sudo)
@@ -27,7 +32,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
 # Source library modules
-for _lib in colors detect validate dscl suppress backup status heal; do
+for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist; do
 	_lib_path="$LIB_DIR/$_lib.sh"
 	if [ -f "$_lib_path" ]; then
 		# shellcheck disable=SC1090
@@ -175,6 +180,69 @@ cmd_unpersist() {
 	remove_persist_launchdaemon "$data_mount"
 }
 
+cmd_firewall() {
+	header "unleash — pf Firewall MDM Block"
+	if ! is_root; then
+		error_exit "Firewall requires sudo: sudo ./unleash firewall"
+	fi
+	if is_recovery; then
+		local data_mount
+		data_mount=$(resolve_data_volume)
+		install_pf_mdm_block "$data_mount"
+	else
+		install_pf_mdm_block ""
+	fi
+}
+
+cmd_firewall_off() {
+	header "unleash — Remove pf Firewall"
+	if ! is_root; then
+		error_exit "Requires sudo: sudo ./unleash firewall-off"
+	fi
+	if is_recovery; then
+		local data_mount
+		data_mount=$(resolve_data_volume)
+		remove_pf_mdm_block "$data_mount"
+	else
+		remove_pf_mdm_block ""
+	fi
+}
+
+cmd_harden() {
+	header "unleash — Live-OS Hardening"
+	if ! is_root; then
+		error_exit "Hardening requires sudo: sudo ./unleash harden"
+	fi
+	if is_recovery; then
+		info "Hardening from Recovery will skip live-OS checks"
+		harden_live_os
+	else
+		harden_live_os
+	fi
+}
+
+cmd_audit() {
+	header "unleash — Deep MDM Audit"
+	if ! is_root; then
+		error_exit "Audit requires sudo: sudo ./unleash audit"
+	fi
+	deep_status
+}
+
+cmd_whitelist() {
+	header "unleash — Selective MDM Block"
+	if ! is_root; then
+		error_exit "Whitelist requires sudo: sudo ./unleash whitelist"
+	fi
+	if is_recovery; then
+		local data_mount
+		data_mount=$(resolve_data_volume)
+		install_selective_block "$data_mount"
+	else
+		install_selective_block ""
+	fi
+}
+
 cmd_status() {
 	if is_recovery; then
 		local data_mount
@@ -197,6 +265,11 @@ cmd_interactive_recovery() {
 		"Full bypass (create admin + suppress MDM)"
 		"Suppress enrollment only (no user)"
 		"Auto-heal (check and re-suppress)"
+		"Install pf firewall (blocks all Apple services)"
+		"Remove pf firewall"
+		"Install selective block (iCloud-safe)"
+		"Live-OS harden (kill MDM processes)"
+		"Deep MDM audit"
 		"Backup current state"
 		"Restore from backup"
 		"Check MDM status"
@@ -209,13 +282,28 @@ cmd_interactive_recovery() {
 				full_bypass_mode "$data_mount"
 				echo -e "${CYAN}Reboot to apply changes.${NC}"
 				;;
-		"Suppress enrollment only (no user)")
-			suppress_only_mode "$data_mount"
-			;;
-		"Auto-heal (check and re-suppress)")
-			heal_suppress "$data_mount"
-			;;
-		"Backup current state")
+			"Suppress enrollment only (no user)")
+				suppress_only_mode "$data_mount"
+				;;
+			"Auto-heal (check and re-suppress)")
+				heal_suppress "$data_mount"
+				;;
+			"Install pf firewall (blocks all Apple services)")
+				install_pf_mdm_block "$data_mount"
+				;;
+			"Remove pf firewall")
+				remove_pf_mdm_block "$data_mount"
+				;;
+			"Install selective block (iCloud-safe)")
+				install_selective_block "$data_mount"
+				;;
+			"Live-OS harden (kill MDM processes)")
+				harden_live_os
+				;;
+			"Deep MDM audit")
+				deep_status
+				;;
+			"Backup current state")
 				backup_state "$data_mount"
 				;;
 			"Restore from backup")
@@ -289,16 +377,21 @@ main() {
 	case "${1:-}" in
 		bypass)    cmd_bypass ;;
 		suppress)  cmd_suppress ;;
-		heal)      cmd_heal ;;
-		persist)   cmd_persist ;;
-		unpersist) cmd_unpersist ;;
-		backup)    cmd_backup ;;
-		restore)   cmd_restore ;;
-		dualboot)  cmd_dualboot ;;
-		status)    cmd_status ;;
+		heal)        cmd_heal ;;
+		persist)     cmd_persist ;;
+		unpersist)   cmd_unpersist ;;
+		firewall)    cmd_firewall ;;
+		firewall-off) cmd_firewall_off ;;
+		harden)      cmd_harden ;;
+		audit)       cmd_audit ;;
+		whitelist)   cmd_whitelist ;;
+		backup)      cmd_backup ;;
+		restore)     cmd_restore ;;
+		dualboot)    cmd_dualboot ;;
+		status)      cmd_status ;;
 		version|-v|--version) cmd_version ;;
 		help|-h|--help)
-			head -40 "$0" | grep -E '^#   |^# \$'
+			head -50 "$0" | grep -E '^#   |^# \$'
 			exit 0
 			;;
 		"")
@@ -310,7 +403,7 @@ main() {
 			;;
 		*)
 			echo -e "${RED}Unknown command: $1${NC}" >&2
-			echo "Usage: $0 {bypass|suppress|backup|restore|dualboot|status|version|help}" >&2
+			echo "Usage: $0 {bypass|suppress|heal|persist|unpersist|firewall|firewall-off|harden|audit|whitelist|backup|restore|dualboot|status|version|help}" >&2
 			exit 1
 			;;
 	esac
