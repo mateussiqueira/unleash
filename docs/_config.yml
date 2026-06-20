@@ -1,0 +1,6 @@
+title: unleash
+description: Single-script MDM bypass for macOS
+url: "https://mateussiqueira.github.io"
+baseurl: "/unleash"
+theme: jekyll-theme-cayman
+markdown: GFM

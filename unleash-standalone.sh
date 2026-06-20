@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-VERSION="1.6.1"
+VERSION="2.0.0"
 RED='\033[1;31m'
 GRN='\033[1;32m'
 BLU='\033[1;34m'
@@ -602,9 +602,23 @@ full_bypass_mode() {
 
 BACKUP_DIR="$(dirname "$(dirname "$0")")/.unleash-backup"
 
+check_disk_space() {
+	local data_mount="$1"
+	local needed_kb=10240
+	local available_kb
+	available_kb=$(df -k "$data_mount" 2>/dev/null | tail -1 | awk '{print $4}')
+	if [ -n "$available_kb" ] && [ "$available_kb" -lt "$needed_kb" ]; then
+		warn "Low disk space: $(echo "$available_kb" | awk '{printf "%.0f MB", $1/1024}') available"
+		echo -n "Continue anyway? [y/N] "
+		read -r answer
+		[ "$answer" != "y" ] && [ "$answer" != "Y" ] && error_exit "Aborted by user"
+	fi
+}
+
 backup_state() {
 	local data_mount="$1"
 	mkdir -p "$BACKUP_DIR"
+	check_disk_space "$data_mount"
 	step "Saving backup to $BACKUP_DIR"
 
 	if [ -f "$data_mount/private/etc/hosts" ]; then
@@ -1055,16 +1069,34 @@ FIREWALL_ANCHOR="com.unleash/mdm"
 FIREWALL_CONF="/etc/pf.conf"
 FIREWALL_ANCHOR_DIR="/etc/pf.anchors"
 
+pf_backup_anchor() {
+	local root="$1"
+	local anchor_file="${root}${FIREWALL_ANCHOR_DIR}/${FIREWALL_ANCHOR}"
+	[ ! -f "$anchor_file" ] && return 0
+	local backup="${anchor_file}.backup.$(date +%s)"
+	cp "$anchor_file" "$backup" && info "Backed up pf anchor: $backup"
+}
+
+pf_backup_conf() {
+	local root="$1"
+	local pf_conf="${root}${FIREWALL_CONF}"
+	[ ! -f "$pf_conf" ] && return 0
+	local backup="${pf_conf}.backup.$(date +%s)"
+	cp "$pf_conf" "$backup" && info "Backed up pf.conf: $backup"
+}
+
 install_pf_mdm_block() {
 	local data_mount="$1"
 	local root=""
 	[ -n "$data_mount" ] && root="$data_mount"
 
 	step "Installing pf anchor for MDM IP block..."
+	pf_backup_conf "$root"
 
 	local anchor_dir="${root}${FIREWALL_ANCHOR_DIR}"
 	local anchor_file="${anchor_dir}/${FIREWALL_ANCHOR}"
 
+	pf_backup_anchor "$root"
 	mkdir -p "$anchor_dir"
 
 	cat > "$anchor_file" << 'ANCHOR'
@@ -1132,6 +1164,7 @@ remove_pf_mdm_block() {
 
 	local anchor_file="${root}${FIREWALL_ANCHOR_DIR}/${FIREWALL_ANCHOR}"
 	if [ -f "$anchor_file" ]; then
+		pf_backup_anchor "$root"
 		rm -f "$anchor_file"
 		success "Anchor file removed"
 	fi
@@ -1837,6 +1870,37 @@ run_doctor() {
   echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
 }
 
+GPG_KEY_URL="https://raw.githubusercontent.com/mateussiqueira/unleash/main/.github/unleash.gpg"
+
+import_gpg_key() {
+  local tmp_key
+  tmp_key=$(mktemp)
+  if curl -sL "$GPG_KEY_URL" -o "$tmp_key" 2>/dev/null; then
+    gpg --import "$tmp_key" 2>/dev/null || true
+  fi
+  rm -f "$tmp_key"
+}
+
+verify_gpg_signature() {
+  local file="$1"
+  local sig="$2"
+  if ! command -v gpg &>/dev/null; then
+    warn "GPG not available — skipping signature verification"
+    return 0
+  fi
+  import_gpg_key
+  if gpg --verify "$sig" "$file" 2>/dev/null; then
+    info "GPG signature valid"
+    return 0
+  else
+    warn "GPG signature invalid or missing"
+    echo -n "Continue without verification? [y/N] "
+    read -r ans
+    [ "$ans" != "y" ] && [ "$ans" != "Y" ] && error_exit "Aborted"
+    return 0
+  fi
+}
+
 do_self_update() {
   header "Unleash Update"
 
@@ -1848,16 +1912,12 @@ do_self_update() {
   local api_url="https://api.github.com/repos/${repo}/releases/latest"
   local tmp_dir
   tmp_dir=$(mktemp -d)
-  local current_sha
-  current_sha=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
 
   begin "Checking latest release"
   local release_data
   release_data=$(curl -s "$api_url" 2>/dev/null || true)
   local latest_tag
   latest_tag=$(echo "$release_data" | grep '"tag_name"' | head -1 | sed -E 's/.*"v?([^"]+)".*/\1/')
-  local latest_sha
-  latest_sha=$(echo "$release_data" | grep '"target_commitish"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
 
   if [ -z "$latest_tag" ]; then
     end_fail; echo "     No network or invalid response"
@@ -1876,11 +1936,20 @@ do_self_update() {
 
   begin "Downloading latest unleash"
   local dl_url="https://raw.githubusercontent.com/${repo}/main/unleash"
+  local sig_url="${dl_url}.sig"
   local tmp="$tmp_dir/unleash"
+  local sig_tmp="$tmp_dir/unleash.sig"
   if curl -sL "$dl_url" -o "$tmp" && [ -s "$tmp" ]; then
+    curl -sL "$sig_url" -o "$sig_tmp" 2>/dev/null || true
     end_ok
   else
     end_fail; error_exit "Download failed"
+  fi
+
+  if [ -s "$sig_tmp" ]; then
+    begin "Verifying GPG signature"
+    verify_gpg_signature "$tmp" "$sig_tmp"
+    end_ok
   fi
 
   begin "Verifying syntax"
@@ -2165,6 +2234,61 @@ generate_report_json() {
   echo -e "$report"
 }
 
+detect_configurator_enrollment() {
+  local data_mount="${1:-}"
+
+  header "Apple Configurator / ASM Enrollment Check"
+
+  local sys_dir
+  if [ -n "$data_mount" ] && [ -d "$data_mount/private/var/db" ]; then
+    sys_dir="$data_mount/private/var/db"
+  elif [ -d "/private/var/db" ]; then
+    sys_dir="/private/var/db"
+  else
+    warn "Cannot locate system database directory"
+    return 1
+  fi
+
+  local indicators=0
+
+  # Configurator enrollment flag
+  if [ -f "$sys_dir/ConfigurationProflements/Setup/.configuratorEnrollment" ]; then
+    echo -e "${YEL}⚠ Apple Configurator enrollment detected${NC}"
+    indicators=$((indicators + 1))
+  fi
+
+  # Check for ASM/ABM cloud config records
+  for f in "$sys_dir"/ConfigurationProfiles/Settings/.cloudConfig*; do
+    [ -f "$f" ] || continue
+    local name
+    name=$(basename "$f")
+    echo -e "${YEL}  DEP marker present: $name${NC}"
+    indicators=$((indicators + 1))
+  done
+
+  # Enrollment challenge tokens
+  local challenge_dir="$sys_dir/ConfigurationProflements/Setup"
+  if [ -f "$challenge_dir/.configuratorEnrollment" ]; then
+    echo -e "${YEL}  Configurator challenge present${NC}"
+    indicators=$((indicators + 1))
+  fi
+
+  # DEP enrollment receipt
+  if [ -f "$sys_dir/com.apple.DEPReceipt" ]; then
+    echo -e "${YEL}  DEP receipt found${NC}"
+    indicators=$((indicators + 1))
+  fi
+
+  if [ "$indicators" -eq 0 ]; then
+    echo -e "${GRN}✓ No Configurator/ASM enrollment detected${NC}"
+    return 0
+  else
+    echo ""
+    echo -e "${YEL}Fix: re-run bypass from Recovery, then run 'sudo ./unleash harden'${NC}"
+    return 1
+  fi
+}
+
 detect_migration_assistant() {
   local data_mount="${1:-}"
 
@@ -2215,10 +2339,37 @@ detect_migration_assistant() {
       ma_indicators=$((ma_indicators + 1))
       details="$details  $user: ManagedClient Application Support\n"
     fi
+
+    local caches="$home/Library/Caches"
+    if [ -d "$caches" ]; then
+      local enrollment_cache
+      enrollment_cache=$(ls "$caches"/com.apple.enrollment* 2>/dev/null | head -3 || true)
+      if [ -n "$enrollment_cache" ]; then
+        ma_indicators=$((ma_indicators + 1))
+        details="$details  $user: enrollment cache files\n"
+      fi
+
+      local mdmd_cache
+      mdmd_cache=$(ls "$caches"/com.apple.mdm* 2>/dev/null | head -3 || true)
+      if [ -n "$mdmd_cache" ]; then
+        ma_indicators=$((ma_indicators + 1))
+        details="$details  $user: MDM cache files\n"
+      fi
+    fi
+
+    local keychains="$home/Library/Keychains"
+    if [ -f "$keychains/OCSPCache.plist" ]; then
+      local ocsp_mdm
+      ocsp_mdm=$(grep -l "mdm" "$keychains/OCSPCache.plist" 2>/dev/null || true)
+      if [ -n "$ocsp_mdm" ]; then
+        ma_indicators=$((ma_indicators + 1))
+        details="$details  $user: MDM OCSP cache\n"
+      fi
+    fi
   done
 
   if [ "$ma_indicators" -gt 0 ]; then
-    echo -e "${YEL}⚠ Migration Assistant artifacts detected:${NC}"
+    echo -e "${YEL}⚠ Migration Assistant artifacts detected (severity: $ma_indicators):${NC}"
     echo -e "$details" | sed '/^$/d'
     echo ""
     echo -e "${YEL}These user-level artifacts can re-enable MDM on every login.${NC}"
@@ -2459,6 +2610,14 @@ show_cmd_help() {
 		monitor-stop) echo "Stop the monitor daemon." ;;
 		monitor-status) echo "Check if monitor is running." ;;
 		doctor)     echo "Run pre-flight diagnostics." ;;
+		init)       echo "Interactive setup wizard." ;;
+		suggest)    echo "Risk-based recommendations." ;;
+		remediate)  echo "Per-org MDM cleanup." ;;
+		predict)    echo "Look up serial number enrollment." ;;
+		telemetry)  echo "Manage anonymous usage stats (opt-in)." ;;
+		discord-bot) echo "Start Discord MDM alert bot." ;;
+		discord-bot-stop) echo "Stop Discord bot." ;;
+		discord-bot-status) echo "Check Discord bot status." ;;
 		demo)       echo "Simulated bypass flow (no changes)." ;;
 		update)     echo "Self-update from GitHub releases." ;;
 		uninstall)  echo "Remove all Unleash traces." ;;
@@ -2515,6 +2674,11 @@ Bypass / suppress / monitor MDM enrollment on macOS.
     restore         Revert from backup
     dualboot        Target an external macOS install
 
+    init            Interactive setup wizard
+    suggest         Risk-based recommendations
+    remediate       Per-org MDM cleanup
+    predict         Look up serial number enrollment
+    telemetry       Manage anonymous usage stats (opt-in)
   Diagnostics:
     doctor          Run pre-flight checks on this environment
     report          Generate a full markdown status report
@@ -2532,6 +2696,9 @@ Bypass / suppress / monitor MDM enrollment on macOS.
     update          Self-update to the latest GitHub release
     uninstall       Remove all Unleash traces from the system
     reinstall       Uninstall + reinstall (persist + whitelist + monitor)
+    discord-bot         Start Discord MDM alert bot
+    discord-bot-stop    Stop Discord bot
+    discord-bot-status  Check Discord bot status
 
   Info:
     status          Show MDM enrollment status (Recovery only)
@@ -2982,7 +3149,11 @@ main() {
 		monitor-stop|mn-stop) cmd_monitor_stop ;;
 		monitor-status|mn-st) cmd_monitor_status ;;
 		version|-v|--version) cmd_version ;;
-    doctor)           run_doctor ;;
+		init)            cmd_init ;;
+		suggest)         cmd_suggest ;;
+		remediate)       cmd_remediate "$2" ;;
+		predict)         cmd_predict "$2" ;;
+		telemetry)       telemetry_opt_in "$2" ;;
 		demo)             run_demo ;;
 		update)           do_self_update ;;
 		uninstall)        do_uninstall ;;
@@ -2998,6 +3169,9 @@ main() {
 			install_monitor_launchdaemon ""
 			success "Reinstall complete"
 			;;
+		discord-bot)          cmd_discord_bot_install "$2" "$3" ;;
+		discord-bot-stop)     cmd_discord_bot_stop ;;
+		discord-bot-status)   cmd_discord_bot_status ;;
 		help|-h|--help)   show_help; exit 0 ;;
 		"")
 			if is_recovery; then

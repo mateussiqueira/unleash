@@ -1,5 +1,27 @@
 # Changelog
 
+## [2.0.0] — 2026-06-20
+
+### Added
+- **init** wizard: interactive setup with MA scan, firewall, monitor, persist prompts
+- **suggest** command: risk-based recommendations (analyzes system, suggests commands)
+- **remediate** command: per-org MDM cleanup (JAMF, Mosyle, Addigy, Kandji, VMware)
+- **predict** command: serial number lookup (predicts org enrollment from prefix)
+- **telemetry** command: opt-in anonymous usage stats
+- **discord-bot** command: Discord DM alerts when MDM is detected
+- Jekyll docs config (_config.yml, Gemfile)
+- Nix package (default.nix)
+- Dockerfile for testing
+- GPG signature verification in self-update
+- GPG signing script for releases
+- Per-command `--help` / `-h` flag
+- CircleCI config as free CI alternative
+- CI.md with local CI docs
+
+### Changed
+- GPG verification added to self-update flow
+- Version bumped to 2.0.0
+
 ## [1.6.1] — 2026-06-20
 
 ### Added

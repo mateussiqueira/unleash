@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.6.1"
+VERSION="2.0.0"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
-for _lib in colors config detect validate dscl suppress backup status heal firewall harden whitelist check monitor history doctor selfupdate uninstall report ma_detect demo vpn; do
+for _lib in colors config detect validate dscl suppress backup status heal firewall harden whitelist check monitor history doctor selfupdate uninstall report ma_detect demo vpn init suggest remediate telemetry predict discord; do
 	_lib_path="$LIB_DIR/$_lib.sh"
 	if [ -f "$_lib_path" ]; then
 		source "$_lib_path"
@@ -41,6 +41,14 @@ show_cmd_help() {
 		monitor-stop) echo "Stop the monitor daemon." ;;
 		monitor-status) echo "Check if monitor is running." ;;
 		doctor)     echo "Run pre-flight diagnostics." ;;
+		init)       echo "Interactive setup wizard." ;;
+		suggest)    echo "Risk-based recommendations." ;;
+		remediate)  echo "Per-org MDM cleanup." ;;
+		predict)    echo "Look up serial number enrollment." ;;
+		telemetry)  echo "Manage anonymous usage stats (opt-in)." ;;
+		discord-bot) echo "Start Discord MDM alert bot." ;;
+		discord-bot-stop) echo "Stop Discord bot." ;;
+		discord-bot-status) echo "Check Discord bot status." ;;
 		demo)       echo "Simulated bypass flow (no changes)." ;;
 		update)     echo "Self-update from GitHub releases." ;;
 		uninstall)  echo "Remove all Unleash traces." ;;
@@ -97,6 +105,11 @@ Bypass / suppress / monitor MDM enrollment on macOS.
     restore         Revert from backup
     dualboot        Target an external macOS install
 
+    init            Interactive setup wizard
+    suggest         Risk-based recommendations
+    remediate       Per-org MDM cleanup
+    predict         Look up serial number enrollment
+    telemetry       Manage anonymous usage stats (opt-in)
   Diagnostics:
     doctor          Run pre-flight checks on this environment
     report          Generate a full markdown status report
@@ -114,6 +127,9 @@ Bypass / suppress / monitor MDM enrollment on macOS.
     update          Self-update to the latest GitHub release
     uninstall       Remove all Unleash traces from the system
     reinstall       Uninstall + reinstall (persist + whitelist + monitor)
+    discord-bot         Start Discord MDM alert bot
+    discord-bot-stop    Stop Discord bot
+    discord-bot-status  Check Discord bot status
 
   Info:
     status          Show MDM enrollment status (Recovery only)
@@ -564,7 +580,11 @@ main() {
 		monitor-stop|mn-stop) cmd_monitor_stop ;;
 		monitor-status|mn-st) cmd_monitor_status ;;
 		version|-v|--version) cmd_version ;;
-    doctor)           run_doctor ;;
+		init)            cmd_init ;;
+		suggest)         cmd_suggest ;;
+		remediate)       cmd_remediate "$2" ;;
+		predict)         cmd_predict "$2" ;;
+		telemetry)       telemetry_opt_in "$2" ;;
 		demo)             run_demo ;;
 		update)           do_self_update ;;
 		uninstall)        do_uninstall ;;
@@ -580,6 +600,9 @@ main() {
 			install_monitor_launchdaemon ""
 			success "Reinstall complete"
 			;;
+		discord-bot)          cmd_discord_bot_install "$2" "$3" ;;
+		discord-bot-stop)     cmd_discord_bot_stop ;;
+		discord-bot-status)   cmd_discord_bot_status ;;
 		help|-h|--help)   show_help; exit 0 ;;
 		"")
 			if is_recovery; then
