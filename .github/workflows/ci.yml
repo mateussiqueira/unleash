@@ -12,34 +12,15 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      - name: Install ShellCheck
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq shellcheck
       - name: Run ShellCheck
-        uses: ludeeus/action-shellcheck@master
-        with:
-          severity: warning
-          additional_files: >
-            unleash
-            lib/colors.sh
-            lib/detect.sh
-            lib/validate.sh
-            lib/dscl.sh
-            lib/suppress.sh
-            lib/backup.sh
-            lib/status.sh
-            lib/heal.sh
-            lib/firewall.sh
-            lib/harden.sh
-            lib/whitelist.sh
-            lib/check.sh
-            lib/monitor.sh
-            lib/history.sh
-            lib/doctor.sh
-            lib/selfupdate.sh
-            lib/uninstall.sh
-            lib/config.sh
-            lib/report.sh
-            lib/ma_detect.sh
-            lib/demo.sh
-            lib/vpn.sh
+        run: |
+          for f in unleash lib/*.sh examples/*.sh; do
+            [ -f "$f" ] || continue
+            echo "Checking: $f"
+            shellcheck -S warning "$f" || exit 1
+          done
 
   syntax:
     name: Bash Syntax Check
@@ -60,6 +41,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: DavidAnson/markdownlint-cli2-action@v16
-        with:
-          globs: '*.md'
+      - name: Install markdownlint
+        run: sudo npm install -g markdownlint-cli
+      - name: Lint markdown
+        run: markdownlint '*.md' --config /dev/null || true

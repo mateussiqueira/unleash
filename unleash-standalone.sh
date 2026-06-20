@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-VERSION="1.6.0"
+VERSION="1.6.1"
 RED='\033[1;31m'
 GRN='\033[1;32m'
 BLU='\033[1;34m'
@@ -2434,6 +2434,46 @@ vpn_kill_status() {
 }
 
 
+show_cmd_help() {
+	case "$1" in
+		bypass)     echo "Bypass MDM from Recovery. Creates admin user." ;;
+		suppress)   echo "Suppress enrollment without creating a user." ;;
+		heal)       echo "Re-apply suppression after macOS updates." ;;
+		persist)    echo "Install auto-heal LaunchDaemon." ;;
+		unpersist)  echo "Remove auto-heal LaunchDaemon." ;;
+		firewall)   echo "Block MDM IPs via pf (kernel-level). DoH-proof." ;;
+		firewall-off) echo "Remove pf MDM block." ;;
+		harden)     echo "Kill MDM processes + remove profiles + flush DNS." ;;
+		audit)      echo "Deep system scan with risk score." ;;
+		whitelist)  echo "Block only MDM domains, keep iCloud/App Store." ;;
+		backup)     echo "Save current state." ;;
+		restore)    echo "Restore from backup." ;;
+		dualboot)   echo "Target an external macOS install." ;;
+		status)     echo "Show MDM enrollment status (Recovery only)." ;;
+		check)      echo "Pre-format / pre-upgrade safety report." ;;
+		history)    echo "Show event log from monitor/heal runs." ;;
+		history-clear) echo "Clear event log." ;;
+		monitor)    echo "Start background MDM monitor (5 min interval)." ;;
+		monitor-install) echo "Install monitor as LaunchDaemon." ;;
+		monitor-uninstall) echo "Remove monitor LaunchDaemon." ;;
+		monitor-stop) echo "Stop the monitor daemon." ;;
+		monitor-status) echo "Check if monitor is running." ;;
+		doctor)     echo "Run pre-flight diagnostics." ;;
+		demo)       echo "Simulated bypass flow (no changes)." ;;
+		update)     echo "Self-update from GitHub releases." ;;
+		uninstall)  echo "Remove all Unleash traces." ;;
+		reinstall)  echo "Uninstall + clean install." ;;
+		report)     echo "Generate full status report (markdown or --json)." ;;
+		config)     echo "View/edit ~/.unleash.conf settings." ;;
+		vpn-kill)   echo "Install pf kill-switch (blocks MDM outside VPN)." ;;
+		vpn-kill-remove) echo "Remove VPN kill-switch." ;;
+		vpn-kill-status) echo "Check VPN kill-switch status." ;;
+		version)    echo "Show version and exit." ;;
+		help)       show_help ;;
+		*)          show_help ;;
+	esac
+}
+
 show_help() {
 	cat <<'HELP'
 Usage: ./unleash <command> [options]
@@ -2910,6 +2950,12 @@ parse_global_opts() {
 main() {
 	load_config
 	eval "set -- $(parse_global_opts "$@")"
+
+	# Per-command help
+	if [ "${2:-}" = "--help" ] || [ "${2:-}" = "-h" ]; then
+		show_cmd_help "${1:-}"
+		exit 0
+	fi
 
 	case "${1:-}" in
 		bypass|by)       cmd_bypass ;;

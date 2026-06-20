@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 630" width="1200" height="630">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e1e2e"/>
+      <stop offset="100%" stop-color="#11111b"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#89b4fa"/>
+      <stop offset="100%" stop-color="#b4befe"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Terminal window -->
+  <rect x="100" y="140" width="1000" height="380" fill="#181825" rx="16" stroke="#313244" stroke-width="2"/>
+  <rect x="100" y="140" width="1000" height="48" fill="#313244" rx="16"/>
+  <rect x="100" y="172" width="1000" height="16" fill="#313244"/>
+  <circle cx="128" cy="164" r="8" fill="#f38ba8"/>
+  <circle cx="152" cy="164" r="8" fill="#fab387"/>
+  <circle cx="176" cy="164" r="8" fill="#a6e3a1"/>
+  <text x="600" y="170" fill="#6c7086" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="20">unleash — terminal</text>
+
+  <!-- Code lines -->
+  <text x="140" y="240" fill="#89b4fa" font-family="SFMono-Regular,Consolas,monospace" font-size="22">$ sudo ./unleash bypass</text>
+
+  <text x="140" y="290" fill="#a6e3a1" font-family="SFMono-Regular,Consolas,monospace" font-size="20">✓ MDM domains blocked (13/13)</text>
+  <text x="140" y="330" fill="#a6e3a1" font-family="SFMono-Regular,Consolas,monospace" font-size="20">✓ DEP enrollment markers removed</text>
+  <text x="140" y="370" fill="#a6e3a1" font-family="SFMono-Regular,Consolas,monospace" font-size="20">✓ Configuration profiles cleaned</text>
+  <text x="140" y="410" fill="#a6e3a1" font-family="SFMono-Regular,Consolas,monospace" font-size="20">✓ User-level artifacts purged</text>
+
+  <!-- Result box -->
+  <rect x="140" y="440" width="920" height="48" fill="#313244" rx="8"/>
+  <text x="600" y="470" fill="#a6e3a1" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="24" font-weight="bold">MDM BYPASSED — reboot and enjoy</text>
+
+  <!-- Footer -->
+  <text x="600" y="560" fill="#6c7086" text-anchor="middle" font-family="SFMono-Regular,Consolas,monospace" font-size="18">github.com/mateussiqueira/unleash</text>
+
+  <!-- Cursor blink -->
+  <rect x="380" y="226" width="14" height="26" fill="#cdd6f4" rx="3">
+    <animate attributeName="opacity" values="1;0;1" dur="1s" repeatCount="indefinite"/>
+  </rect>
+</svg>

@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.1] — 2026-06-20
+
+### Added
+- Per-command `--help` / `-h` flag (`unleash bypass --help`, etc.)
+- CI rewritten to use zero-cost actions only (no Docker-based actions)
+- LICENSE added to standalone binary header
+
+### Fixed
+- demo.svg typo (`xml:place` → `xml:space`) fixed
+- wiki/Home.md removed from main repo (belongs in wiki)
+- Per-command help integrated into dispatch
+
 ## [1.6.0] — 2026-06-20
 
 ### Added
