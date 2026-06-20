@@ -1,0 +1,54 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  shellcheck:
+    name: ShellCheck
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run ShellCheck
+        uses: ludeeus/action-shellcheck@master
+        with:
+          severity: warning
+          additional_files: >
+            unleash
+            lib/colors.sh
+            lib/detect.sh
+            lib/validate.sh
+            lib/dscl.sh
+            lib/suppress.sh
+            lib/backup.sh
+            lib/status.sh
+            lib/heal.sh
+            lib/firewall.sh
+            lib/harden.sh
+            lib/whitelist.sh
+
+  syntax:
+    name: Bash Syntax Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check syntax
+        run: |
+          for f in unleash lib/*.sh examples/*.sh; do
+            [ -f "$f" ] || continue
+            echo "Checking: $f"
+            bash -n "$f" || exit 1
+          done
+          echo "All files pass syntax check"
+
+  markdown:
+    name: Markdown Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: DavidAnson/markdownlint-cli2-action@v16
+        with:
+          globs: '*.md'

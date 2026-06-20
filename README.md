@@ -1,6 +1,13 @@
 # unleash — Unified MDM Bypass for macOS
 
-**unleash** is a single-tool solution to bypass, suppress, backup, restore, and audit MDM (Mobile Device Management) enrollment on macOS. It unifies the functionality of the original `bypass-mdm` project into one script with CLI flags and an interactive menu.
+[![CI](https://github.com/mateussiqueira/unleash/actions/workflows/ci.yml/badge.svg)](https://github.com/mateussiqueira/unleash/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![macOS](https://img.shields.io/badge/macOS-12.x–26.x-green.svg)](README.md)
+[![Apple Silicon](https://img.shields.io/badge/Apple%20Silicon-M1%20|%20M2%20|%20M3%20|%20M4-orange.svg)](#intel-vs-apple-silicon)
+[![Intel](https://img.shields.io/badge/Intel-T2%20supported-lightgrey.svg)](#intel-vs-apple-silicon)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+
+**unleash** is a single-tool solution to bypass, suppress, backup, restore, audit, and harden MDM (Mobile Device Management) enrollment on macOS. It unifies the functionality of the original `bypass-mdm` project into a single script with CLI flags and an interactive menu.
 
 > **Legal**: This tool suppresses MDM locally on devices you own. It does not touch Apple Business Manager (ABM) records. The permanent fix is the organization releasing the device. Use at your own risk.
 
@@ -18,6 +25,7 @@
 - [Architecture](#architecture)
 - [Safety & Limitations](#safety--limitations)
 - [FAQ](#faq)
+- [Contributing](#contributing)
 
 ---
 
@@ -37,8 +45,14 @@ The original `bypass-mdm` project grew into 5 separate scripts (v2, v3, express,
 | Org MDM host blocking | v3 | always |
 | Launchd daemon disable | v3 | always |
 | User-level cleanup | — | yes |
+| pf firewall (DoH-proof) | — | yes |
+| Live-OS hardening | — | yes |
+| Deep MDM audit | — | yes |
+| Selective iCloud-safe block | — | yes |
+| Boot-time persistence (LaunchDaemon) | — | yes |
+| Auto-heal after macOS updates | — | yes |
 | Interactive menu | brew-based | native |
-| CLI flags | none | yes |
+| CLI flags | none | 13 commands |
 
 ---
 
@@ -130,6 +144,72 @@ Removes the LaunchDaemon installed by `unleash persist`:
 sudo ./unleash unpersist   # from booted system
 ./unleash unpersist        # from Recovery mode
 ```
+
+### `unleash firewall` — pf Kernel-Level MDM Block
+
+Blocks Apple MDM infrastructure IP ranges using pf (packet filter), which operates below DNS resolution and is immune to DNS-over-HTTPS bypass:
+
+```bash
+sudo ./unleash firewall    # from booted system or Recovery
+```
+
+Creates a pf anchor at `/etc/pf.anchors/com.unleash/mdm` that drops traffic to Apple's `17.0.0.0/8` and `17.128.0.0/10` IP ranges.
+
+> ⚠️ This blocks ALL Apple services (iCloud, App Store, system updates). Use `unleash whitelist` for selective blocking instead.
+
+### `unleash firewall-off` — Remove pf Block
+
+Flushes the Unleash pf anchor and restores the original `pf.conf`:
+
+```bash
+sudo ./unleash firewall-off
+```
+
+### `unleash harden` — Live-OS Hardening
+
+Runs from the booted system (after bypass) to remove residual MDM artifacts:
+
+```bash
+sudo ./unleash harden
+```
+
+**What it does:**
+1. Kills running MDM processes (ManagedClient, mdmclient, activationd)
+2. Forces removal of installed MDM profiles (`profiles -D -F`)
+3. Scans and removes MDM-related user LaunchAgents
+4. Flushes DNS cache and restarts mDNSResponder
+5. Checks keychain for MDM identity certificates
+6. Scans for JAMF/Intune/Workspace ONE agent binaries
+7. Disables iCloud Private Relay (a DoH source)
+
+### `unleash audit` — Deep MDM Audit
+
+Comprehensive system scan for MDM artifacts, with risk scoring:
+
+```bash
+sudo ./unleash audit       # from booted system
+```
+
+**Checks:**
+1. Installed configuration profiles (name and count)
+2. MDM enrollment state
+3. MDM identity certificates in keychain
+4. User LaunchAgents for MDM references
+5. System LaunchDaemons for MDM references
+6. Running MDM processes
+7. MDM agent binaries (JAMF, Intune, Workspace ONE)
+8. pf firewall status
+9. Overall risk assessment (LOW / MEDIUM / HIGH / CRITICAL)
+
+### `unleash whitelist` — Selective iCloud-Safe Block
+
+Blocks only MDM enrollment endpoints while preserving iCloud, App Store, and system updates:
+
+```bash
+sudo ./unleash whitelist   # from booted system or Recovery
+```
+
+Uses pf rules targeting only the essential MDM domains (`mdmenrollment.apple.com`, `deviceenrollment.apple.com`, `iprofiles.apple.com`) while leaving Apple services unblocked.
 
 ### `unleash suppress` — Suppress Only
 
@@ -530,6 +610,15 @@ Contributions welcome, especially for:
 - iCloud/MDM domain whitelist for selective blocking
 
 ---
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for guidelines.
+
+- [Open issues](https://github.com/mateussiqueira/unleash/issues) for bugs and features
+- Submit PRs with ShellCheck-validated code
+- Test on your hardware and report compatibility
+- Read the [Code of Conduct](CODE_OF_CONDUCT.md)
 
 ## License
 
