@@ -1,0 +1,15 @@
+# Normalize line endings
+* text=auto
+
+# Shell scripts
+*.sh text eol=lf
+
+# Markdown
+*.md text
+
+# SVG
+*.svg text
+
+# Binary
+*.png binary
+*.jpg binary
