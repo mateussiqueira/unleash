@@ -7,7 +7,7 @@
   <text x="360" y="22" fill="#6c7086" text-anchor="middle" font-size="12">unleash — terminal demo</text>
 
   <text x="16" y="60" fill="#89b4fa" xml:space="preserve">$ sudo ./unleash --version</text>
-  <text x="16" y="80" fill="#cdd6f4" xml:place="preserve">unleash v1.6.0</text>
+   <text x="16" y="80" fill="#cdd6f4" xml:space="preserve">unleash v1.6.0</text>
   <text x="16" y="100" fill="#89b4fa" xml:space="preserve">$ sudo ./unleash doctor</text>
   <text x="16" y="118" fill="#a6e3a1">✓</text>
   <text x="32" y="118" fill="#cdd6f4">Script location: /Users/user/unleash</text>
