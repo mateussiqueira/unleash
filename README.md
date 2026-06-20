@@ -96,6 +96,41 @@ Creates a temporary admin account and suppresses MDM enrollment.
 
 > **Must run from Recovery mode.**
 
+### `unleash heal` — Auto-Heal
+
+Checks if MDM suppression is still active and re-applies it if any component has been reset (e.g., after a macOS update). Safe to run from a booted system:
+
+```bash
+sudo ./unleash heal     # from booted system
+./unleash heal          # from Recovery mode
+```
+
+**What it checks:**
+1. DEP marker files — are they still cleared?
+2. Hosts file — are MDM domains still blocked?
+3. Launchd disabled.plist — are enrollment daemons still disabled?
+4. If any check fails, re-runs `suppress_enrollment` to restore suppression
+
+### `unleash persist` — Boot-Time Persistence
+
+Installs a LaunchDaemon that runs `unleash heal` automatically on every boot and every 24 hours:
+
+```bash
+sudo ./unleash persist     # from booted system
+./unleash persist          # from Recovery mode
+```
+
+Creates `/Library/LaunchDaemons/com.unleash.heal.plist`. Logs are written to `/var/log/unleash-heal.log` and `/var/log/unleash-heal.err`.
+
+### `unleash unpersist` — Remove Persistence
+
+Removes the LaunchDaemon installed by `unleash persist`:
+
+```bash
+sudo ./unleash unpersist   # from booted system
+./unleash unpersist        # from Recovery mode
+```
+
 ### `unleash suppress` — Suppress Only
 
 Suppresses MDM enrollment without creating a user. Ideal after a clean bypass breaks (e.g., after macOS update).
@@ -456,8 +491,8 @@ unleash/
 
 ## FAQ
 
-**Q: Does this work on macOS Sequoia?**  
-A: Yes. Tested up to macOS 15.x (Sequoia) on both Intel and Apple Silicon.
+**Q: What macOS versions are supported?**  
+A: macOS 12.x (Monterey) through 15.x (Sequoia) and 26.x (Tahoe). Tested on Intel T2, M1, M2, M3, and M4 hardware.
 
 **Q: Do I need to disable SIP?**  
 A: No. All operations target the Data volume, which does not require SIP to be disabled.

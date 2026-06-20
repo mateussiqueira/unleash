@@ -8,6 +8,9 @@ set -euo pipefail
 #   ./unleash                    Interactive menu (auto-detects Recovery/dualboot)
 #   ./unleash bypass             Full bypass (create admin + suppress)
 #   ./unleash suppress           Suppress-only (no user created)
+#   ./unleash heal               Check and re-apply suppression (auto-heal)
+#   ./unleash persist            Install LaunchDaemon for boot-time persistence
+#   ./unleash unpersist          Remove the persistence LaunchDaemon
 #   ./unleash backup             Backup current state
 #   ./unleash restore            Restore from backup
 #   ./unleash dualboot           Target a different volume (needs sudo)
@@ -24,7 +27,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
 # Source library modules
-for _lib in colors detect validate dscl suppress backup status; do
+for _lib in colors detect validate dscl suppress backup status heal; do
 	_lib_path="$LIB_DIR/$_lib.sh"
 	if [ -f "$_lib_path" ]; then
 		# shellcheck disable=SC1090
@@ -133,6 +136,45 @@ cmd_dualboot() {
 	echo -e "${YEL}  Pass: $passw${NC}"
 }
 
+cmd_heal() {
+	header "unleash — Auto-Heal"
+	if is_recovery; then
+		local data_mount
+		data_mount=$(resolve_data_volume)
+		heal_suppress "$data_mount"
+	else
+		if ! is_root; then
+			error_exit "Heal from booted system requires sudo: sudo ./unleash heal"
+		fi
+		heal_suppress ""
+	fi
+}
+
+cmd_persist() {
+	header "unleash — Install Persistence"
+	local data_mount
+	if is_recovery; then
+		data_mount=$(resolve_data_volume)
+	else
+		if ! is_root; then
+			error_exit "Persistence requires sudo: sudo ./unleash persist"
+		fi
+		data_mount=""
+	fi
+	install_persist_launchdaemon "$data_mount"
+}
+
+cmd_unpersist() {
+	header "unleash — Remove Persistence"
+	local data_mount
+	if is_recovery; then
+		data_mount=$(resolve_data_volume)
+	else
+		data_mount=""
+	fi
+	remove_persist_launchdaemon "$data_mount"
+}
+
 cmd_status() {
 	if is_recovery; then
 		local data_mount
@@ -154,6 +196,7 @@ cmd_interactive_recovery() {
 	local options=(
 		"Full bypass (create admin + suppress MDM)"
 		"Suppress enrollment only (no user)"
+		"Auto-heal (check and re-suppress)"
 		"Backup current state"
 		"Restore from backup"
 		"Check MDM status"
@@ -166,10 +209,13 @@ cmd_interactive_recovery() {
 				full_bypass_mode "$data_mount"
 				echo -e "${CYAN}Reboot to apply changes.${NC}"
 				;;
-			"Suppress enrollment only (no user)")
-				suppress_only_mode "$data_mount"
-				;;
-			"Backup current state")
+		"Suppress enrollment only (no user)")
+			suppress_only_mode "$data_mount"
+			;;
+		"Auto-heal (check and re-suppress)")
+			heal_suppress "$data_mount"
+			;;
+		"Backup current state")
 				backup_state "$data_mount"
 				;;
 			"Restore from backup")
@@ -200,18 +246,25 @@ cmd_interactive_normal() {
 	PS3="Choose an option: "
 	local options=(
 		"Suppress enrollment only"
+		"Auto-heal (check and re-suppress)"
 		"Backup current state"
 		"Restore from backup"
 		"Exit"
 	)
 	select opt in "${options[@]}"; do
 		case $opt in
-			"Suppress enrollment only")
-				local data_mount
-				data_mount=$(resolve_data_volume)
-				suppress_only_mode "$data_mount"
-				;;
-			"Backup current state")
+		"Suppress enrollment only")
+			local data_mount
+			data_mount=$(resolve_data_volume)
+			suppress_only_mode "$data_mount"
+			;;
+		"Auto-heal (check and re-suppress)")
+			if ! is_root; then
+				error_exit "Heal from booted system requires sudo. Run: sudo ./unleash"
+			fi
+			heal_suppress ""
+			;;
+		"Backup current state")
 				local data_mount
 				data_mount=$(resolve_data_volume)
 				backup_state "$data_mount"
@@ -236,13 +289,16 @@ main() {
 	case "${1:-}" in
 		bypass)    cmd_bypass ;;
 		suppress)  cmd_suppress ;;
+		heal)      cmd_heal ;;
+		persist)   cmd_persist ;;
+		unpersist) cmd_unpersist ;;
 		backup)    cmd_backup ;;
 		restore)   cmd_restore ;;
 		dualboot)  cmd_dualboot ;;
 		status)    cmd_status ;;
 		version|-v|--version) cmd_version ;;
 		help|-h|--help)
-			head -30 "$0" | grep -E '^#   |^# \$'
+			head -40 "$0" | grep -E '^#   |^# \$'
 			exit 0
 			;;
 		"")
