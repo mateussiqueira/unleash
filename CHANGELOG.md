@@ -1,5 +1,49 @@
 # Changelog
 
+## [1.6.0] — 2026-06-20
+
+### Added
+- **Homebrew tap**: `brew install mateussiqueira/unleash/unleash`
+- **GitHub Pages**: full command reference at https://mateussiqueira.github.io/unleash/
+- **README.pt-BR.md**: Brazilian Portuguese translation
+- **Bats tests**: doctor, whitelist, config, check, history, uninstall modules
+- **docs/index.md**: landing page for GitHub Pages
+
+### Changed
+- Version bumped to 1.6.0
+- Homebrew formula in separate tap repository
+
+## [1.5.0] — 2026-06-20
+
+### Added
+- **report**: Human-readable or JSON-format system audit report
+- **demo**: Simulated MDM bypass flow (no real changes)
+- **vpn-kill**: pf kill-switch that blocks MDM outside VPN tunnel
+- Third-party firewall detection (Little Snitch, LuLu, Radio Silence)
+
+### Fixed
+- Migration Assistant artifact cleanup now covers all users
+
+## [1.4.0] — 2026-06-20
+
+### Added
+- **doctor**: Pre-flight diagnostics (root, Recovery, libs, disk, dependencies)
+- **update**: Self-update from GitHub releases
+- **uninstall**: Complete removal with 4 safety prompts
+- **reinstall**: Atomic update (uninstall + install)
+
+## [1.3.0] — 2026-06-20
+
+### Added
+- **config**: Persistent settings in ~/.unleash.conf
+- **test** command / `--dry-run` global flag
+- **history / history-clear**: Event log viewer
+- Structured logging (levels, timestamps, color, file output)
+- CLI aliases for every command
+
+### Changed
+- README rewritten (140 → 489 lines) — comprehensive command reference
+
 ## [1.2.0] — 2026-06-20
 
 ### Added
