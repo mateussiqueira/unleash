@@ -1,9 +1,23 @@
 
 BACKUP_DIR="$(dirname "$(dirname "$0")")/.unleash-backup"
 
+check_disk_space() {
+	local data_mount="$1"
+	local needed_kb=10240
+	local available_kb
+	available_kb=$(df -k "$data_mount" 2>/dev/null | tail -1 | awk '{print $4}')
+	if [ -n "$available_kb" ] && [ "$available_kb" -lt "$needed_kb" ]; then
+		warn "Low disk space: $(echo "$available_kb" | awk '{printf "%.0f MB", $1/1024}') available"
+		echo -n "Continue anyway? [y/N] "
+		read -r answer
+		[ "$answer" != "y" ] && [ "$answer" != "Y" ] && error_exit "Aborted by user"
+	fi
+}
+
 backup_state() {
 	local data_mount="$1"
 	mkdir -p "$BACKUP_DIR"
+	check_disk_space "$data_mount"
 	step "Saving backup to $BACKUP_DIR"
 
 	if [ -f "$data_mount/private/etc/hosts" ]; then

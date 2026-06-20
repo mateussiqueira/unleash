@@ -3,16 +3,34 @@ FIREWALL_ANCHOR="com.unleash/mdm"
 FIREWALL_CONF="/etc/pf.conf"
 FIREWALL_ANCHOR_DIR="/etc/pf.anchors"
 
+pf_backup_anchor() {
+	local root="$1"
+	local anchor_file="${root}${FIREWALL_ANCHOR_DIR}/${FIREWALL_ANCHOR}"
+	[ ! -f "$anchor_file" ] && return 0
+	local backup="${anchor_file}.backup.$(date +%s)"
+	cp "$anchor_file" "$backup" && info "Backed up pf anchor: $backup"
+}
+
+pf_backup_conf() {
+	local root="$1"
+	local pf_conf="${root}${FIREWALL_CONF}"
+	[ ! -f "$pf_conf" ] && return 0
+	local backup="${pf_conf}.backup.$(date +%s)"
+	cp "$pf_conf" "$backup" && info "Backed up pf.conf: $backup"
+}
+
 install_pf_mdm_block() {
 	local data_mount="$1"
 	local root=""
 	[ -n "$data_mount" ] && root="$data_mount"
 
 	step "Installing pf anchor for MDM IP block..."
+	pf_backup_conf "$root"
 
 	local anchor_dir="${root}${FIREWALL_ANCHOR_DIR}"
 	local anchor_file="${anchor_dir}/${FIREWALL_ANCHOR}"
 
+	pf_backup_anchor "$root"
 	mkdir -p "$anchor_dir"
 
 	cat > "$anchor_file" << 'ANCHOR'
@@ -80,6 +98,7 @@ remove_pf_mdm_block() {
 
 	local anchor_file="${root}${FIREWALL_ANCHOR_DIR}/${FIREWALL_ANCHOR}"
 	if [ -f "$anchor_file" ]; then
+		pf_backup_anchor "$root"
 		rm -f "$anchor_file"
 		success "Anchor file removed"
 	fi
