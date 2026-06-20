@@ -456,5 +456,3 @@ Use `--verbose` for debug messages and `--log-file <path>` to write everything t
 - [Security Policy](https://github.com/mateussiqueira/unleash/blob/main/SECURITY.md)
 - [Discussions](https://github.com/mateussiqueira/unleash/discussions)
 - [Report a Bug](https://github.com/mateussiqueira/unleash/issues/new?template=bug_report.md)
-
-{% include lang-toggle.html %}

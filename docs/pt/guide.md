@@ -173,5 +173,3 @@ Comandos principais (`bypass`, `suppress`, `heal`) funcionam completamente offli
 ---
 
 [Voltar ao início](/) · [FAQ](faq)
-
-{% include lang-toggle.html %}

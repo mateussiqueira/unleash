@@ -435,5 +435,3 @@ Use `--verbose` para mensagens de debug e `--log-file <caminho>` para escrever t
 - [Política de Segurança](https://github.com/mateussiqueira/unleash/blob/main/SECURITY.md)
 - [Discussões](https://github.com/mateussiqueira/unleash/discussions)
 - [Reportar Bug](https://github.com/mateussiqueira/unleash/issues/new?template=bug_report.md)
-
-{% include lang-toggle.html %}

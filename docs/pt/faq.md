@@ -138,5 +138,3 @@ O Unleash verifica `/private/var/db/dslocal/nodes/Default` no volume montado. Se
 ---
 
 [Voltar ao início](/) · [Guia de Arquitetura](guide)
-
-{% include lang-toggle.html %}

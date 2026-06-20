@@ -173,5 +173,3 @@ Core commands (`bypass`, `suppress`, `heal`) work entirely offline. Only `update
 ---
 
 [Back to home](/) · [FAQ](faq)
-
-{% include lang-toggle.html %}
