@@ -1,4 +1,4 @@
-## unleash v1.6.0 — Terminal Demo
+## unleash v2.0.0 — Terminal Demo
 
 ```
 $ sudo ./unleash --version

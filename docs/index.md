@@ -136,6 +136,12 @@ sudo ./unleash status -d
 | `demo` | Simulated bypass flow — no real changes |
 | `test` | Dry-run simulation of any command |
 | `dualboot` | Target an external or dual-boot volume |
+| `init` | Interactive setup wizard |
+| `suggest` | Risk-based system analysis and recommendations |
+| `remediate` | Per-org MDM cleanup (JAMF, Mosyle, Kandji) |
+| `predict` | Serial number lookup — predict org enrollment |
+| `telemetry` | Manage anonymous usage stats (opt-in) |
+| `discord-bot` | Start Discord DM alert bot |
 
 ### Aliases
 
@@ -228,6 +234,26 @@ Yes, but:
 - The basic `/etc/hosts` block also blocks `albert.apple.com` (iCloud activation) and `gdmf.apple.com`
 - Use the `whitelist` command instead of `firewall` to block only MDM domains and leave iCloud/App Store working
 - Or manually remove those two lines from `/etc/hosts`
+
+---
+
+## Smart Features
+
+### `suggest` — Risk-Based Recommendations
+
+Reads your system state (DEP markers, hosts file, pf firewall, user artifacts, Configurator enrollment) and gives a risk score plus specific commands to run.
+
+### `remediate` — Per-Org Cleanup
+
+Some MDM vendors (JAMF, Mosyle, Addigy, Kandji, VMware) leave vendor-specific artifacts. `remediate` auto-detects the org and applies targeted cleanup — including extra DNS blocks for their management domains.
+
+### `predict` — Serial Number Lookup
+
+Enter a serial number and unleash checks known org prefixes to predict whether a Mac was enrolled by a specific organization. Useful for buying used Macs.
+
+### `init` — Setup Wizard
+
+Walks you through first-time setup: Migration Assistant scan, Configurator check, firewall enable, monitor install, persist install, and system backup. One command to go from zero to protected.
 
 ---
 
