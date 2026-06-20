@@ -1,30 +1,20 @@
 #!/bin/bash
-# Quickstart examples for unleash
-# Copy these one-liners as needed.
+# Usage examples for unleash — copy/paste what you need.
 
-# === EXPRESS (from external SSD, no download) ===
-# 1. Copy unleash folder to your SSD
-# 2. Boot into Recovery
-# 3. Terminal ->
-#    /Volumes/YourSSDName/unleash/unleash
-
-# === ONE-LINER (download + run) ===
-# curl -L https://raw.githubusercontent.com/mateussiqueira/unleash/main/unleash -o unleash
-# chmod +x unleash && ./unleash bypass
-
-# === DUAL-BOOT ===
-# sudo ./unleash dualboot
-
-# === SUPPRESS ONLY ===
-# ./unleash suppress
-
-# === BACKUP ===
-# ./unleash backup
-
-# === RESTORE ===
-# ./unleash restore
-
-# === STATUS ===
-# ./unleash status
-
-echo "See the comments in this file for usage examples."
+echo "=== unleash quick examples ==="
+echo ""
+echo "From Recovery (external SSD):"
+echo '  "/Volumes/YourSSD/unleash/unleash" bypass'
+echo ""
+echo "From Recovery (one-liner, needs internet):"
+echo "  curl -L https://raw.githubusercontent.com/mateussiqueira/unleash/main/unleash -o /tmp/unleash && chmod +x /tmp/unleash && /tmp/unleash bypass"
+echo ""
+echo "From booted system (sudo needed):"
+echo "  sudo ./unleash heal        # fix after update"
+echo "  sudo ./unleash harden      # cleanup live MDM artifacts"
+echo "  sudo ./unleash audit       # deep scan"
+echo "  sudo ./unleash check       # pre-format report"
+echo "  sudo ./unleash monitor     # watch MDM in background"
+echo "  sudo ./unleash persist     # auto-heal on every boot"
+echo "  sudo ./unleash firewall    # pf kernel block"
+echo "  sudo ./unleash whitelist   # block MDM only, keep iCloud"

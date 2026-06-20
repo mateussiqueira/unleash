@@ -1,3 +1,76 @@
+install_monitor_launchdaemon() {
+  local data_mount="$1"
+  local root=""
+  [ -n "$data_mount" ] && root="$data_mount"
+
+  local unleash_src
+  if [ -n "$SCRIPT_DIR" ]; then
+    unleash_src="$SCRIPT_DIR/unleash"
+  else
+    unleash_src="$(cd "$(dirname "$0")" && pwd)/unleash"
+  fi
+
+  step "Installing monitor LaunchDaemon..."
+
+  local plist_dir="${root}/Library/LaunchDaemons"
+  local plist_path="${plist_dir}/com.unleash.monitor.plist"
+  mkdir -p "$plist_dir"
+
+  cat > "$plist_path" <<- PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.unleash.monitor</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/bash</string>
+        <string>-c</string>
+        <string>${unleash_src} monitor</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>Nice</key>
+    <integer>1</integer>
+    <key>StandardOutPath</key>
+    <string>/var/log/unleash-monitor.log</string>
+    <key>StandardErrorPath</key>
+    <string>/var/log/unleash-monitor.err</string>
+</dict>
+</plist>
+PLIST
+
+  chmod 644 "$plist_path"
+  success "Monitor LaunchDaemon: $plist_path"
+
+  if command -v launchctl &>/dev/null; then
+    launchctl load "$plist_path" 2>/dev/null \
+      && success "Monitor loaded (starts at boot)" \
+      || info "Will load on next boot"
+  fi
+}
+
+uninstall_monitor_launchdaemon() {
+  local data_mount="$1"
+  local root=""
+  [ -n "$data_mount" ] && root="$data_mount"
+  local plist_path="${root}/Library/LaunchDaemons/com.unleash.monitor.plist"
+
+  if [ -f "$plist_path" ]; then
+    step "Removing monitor LaunchDaemon..."
+    if command -v launchctl &>/dev/null; then
+      launchctl unload "$plist_path" 2>/dev/null || true
+    fi
+    rm -f "$plist_path"
+    success "Monitor LaunchDaemon removed"
+  else
+    info "No monitor LaunchDaemon installed"
+  fi
+}
+
 monitor_mdm() {
   header "MDM Monitor (continuous)"
 

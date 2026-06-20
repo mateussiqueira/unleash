@@ -45,6 +45,8 @@ Bypass / suppress / monitor MDM enrollment on macOS.
   Monitoring:
     check           Pre-format / pre-upgrade safety report
     monitor         Background daemon (watches MDM every 5 min)
+    monitor-install Install monitor as LaunchDaemon (boot persistent)
+    monitor-uninstall Remove monitor LaunchDaemon
     monitor-stop    Stop the daemon
     monitor-status  Check if daemon is running
 
@@ -67,6 +69,8 @@ ALIASES
     sv              suppress
     by              bypass
     mn              monitor
+    mn-install      monitor-install
+    mn-uninstall    monitor-uninstall
     mn-stop         monitor-stop
     mn-st           monitor-status
 
@@ -278,7 +282,13 @@ cmd_check() {
   check_upgrade_safety
 }
 
-cmd_monitor() { monitor_mdm; }
+cmd_monitor() {
+  case "${2:-}" in
+    install)   install_monitor_launchdaemon "" ;;
+    uninstall) uninstall_monitor_launchdaemon "" ;;
+    *)         monitor_mdm ;;
+  esac
+}
 cmd_monitor_stop() { stop_monitor; }
 cmd_monitor_status() { monitor_status; }
 
@@ -430,7 +440,9 @@ main() {
 		dualboot)         cmd_dualboot ;;
 		status|st|ls)     cmd_status ;;
 		check)            cmd_check ;;
-		monitor|mn)       cmd_monitor ;;
+		monitor|mn)           cmd_monitor "$@" ;;
+		monitor-install|mn-install) install_monitor_launchdaemon "" ;;
+		monitor-uninstall|mn-uninstall) uninstall_monitor_launchdaemon "" ;;
 		monitor-stop|mn-stop) cmd_monitor_stop ;;
 		monitor-status|mn-st) cmd_monitor_status ;;
 		version|-v|--version) cmd_version ;;
