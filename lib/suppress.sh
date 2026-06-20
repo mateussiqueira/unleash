@@ -37,6 +37,15 @@ suppress_enrollment() {
 		deviceenrollment.apple.com
 		mdmenrollment.apple.com
 		acmdm.apple.com
+		albert.apple.com
+		gdmf.apple.com
+		ax.init-content.apple.com
+		init-content.apple.com
+		configuration.apple.com
+		xp.apple.com
+		gs.apple.com
+		tb.apple.com
+		vpp.itunes.apple.com
 	)
 	[ -n "$mdm_host" ] && domains+=("$mdm_host")
 
@@ -53,20 +62,46 @@ suppress_enrollment() {
 	rm -f "$cfg/.cloudConfigHasActivationRecord" \
 	      "$cfg/.cloudConfigRecordFound" \
 	      "$cfg/.cloudConfigTimerCheck" \
+	      "$cfg/.cloudConfigProfileInstalled" \
 	      "$cfg/com.apple.mdm.depnag.plist" \
 	      "$cfg/com.apple.mdm.prelogin.plist" 2>/dev/null
-	touch "$cfg/.cloudConfigRecordNotFound" \
-	      "$cfg/.cloudConfigProfileInstalled"
+	touch "$cfg/.cloudConfigRecordNotFound"
 	success "Cached record cleared; bypass markers set"
 
-	step "Disabling enrollment daemon..."
+	step "Cleaning user-level MDM artifacts..."
+	local home
+	for home in "$data_mount/Users/"*/; do
+		[ -d "$home/Library" ] || continue
+		local user
+		user=$(basename "$home")
+		info "Cleaning: $user"
+		rm -rf "$home/Library/Preferences/com.apple.mdm"* 2>/dev/null || true
+		rm -rf "$home/Library/Preferences/com.apple.ManagedClient"* 2>/dev/null || true
+		rm -rf "$home/Library/Application Support/com.apple.ManagedClient"* 2>/dev/null || true
+		rm -rf "$home/Library/LaunchAgents/com.apple.mdm"* 2>/dev/null || true
+		for agent in "$home/Library/LaunchAgents/"*; do
+			[ -f "$agent" ] || continue
+			if grep -qi mdm "$agent" 2>/dev/null || grep -qi enrollment "$agent" 2>/dev/null; then
+				rm -f "$agent"
+				info "  removed LaunchAgent: $(basename "$agent")"
+			fi
+		done
+	done
+	success "User-level MDM artifacts removed"
+
+	step "Disabling enrollment daemons..."
 	mkdir -p "$(dirname "$ldp")"
 	[ -f "$ldp" ] || printf '<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n<plist version="1.0"><dict/></plist>\n' >"$ldp"
-	for label in com.apple.ManagedClient.enroll com.apple.mdmclient.daemon.runatboot; do
+	for label in \
+		com.apple.ManagedClient.enroll \
+		com.apple.ManagedClient.cloudConfiguration \
+		com.apple.mdmclient.daemon.runatboot \
+		com.apple.activationd; do
 		$PB -c "Add :$label bool true" "$ldp" 2>/dev/null \
 			|| $PB -c "Set :$label true" "$ldp" 2>/dev/null
+		info "disabled $label"
 	done
-	success "Enrollment daemon disabled"
+	success "Enrollment daemons disabled (4 overrides)"
 
 	touch "$setupdone" 2>/dev/null || true
 }

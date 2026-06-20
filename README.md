@@ -1,81 +1,460 @@
 # unleash — Unified MDM Bypass for macOS
 
-A single tool to bypass, suppress, backup, restore, and check MDM enrollment on macOS.
+**unleash** is a single-tool solution to bypass, suppress, backup, restore, and audit MDM (Mobile Device Management) enrollment on macOS. It unifies the functionality of the original `bypass-mdm` project into one script with CLI flags and an interactive menu.
+
+> **Legal**: This tool suppresses MDM locally on devices you own. It does not touch Apple Business Manager (ABM) records. The permanent fix is the organization releasing the device. Use at your own risk.
+
+---
+
+## Table of Contents
+
+- [Why unleash?](#why-unleash)
+- [Quick Start](#quick-start)
+- [Commands](#commands)
+- [How It Works](#how-it-works)
+- [Intel vs Apple Silicon](#intel-vs-apple-silicon)
+- [Migration Assistant — Known Failure Mode](#migration-assistant--known-failure-mode)
+- [Troubleshooting](#troubleshooting)
+- [Architecture](#architecture)
+- [Safety & Limitations](#safety--limitations)
+- [FAQ](#faq)
+
+---
 
 ## Why unleash?
 
-The original project (bypass-mdm) grew into 5 separate scripts. This one unifies everything:
+The original `bypass-mdm` project grew into 5 separate scripts (v2, v3, express, dualboot.sh, verify.sh). Each handled a different use case with inconsistent options. **unleash** replaces all of them:
 
 | Feature | bypass-mdm | unleash |
 |---------|-----------|---------|
-| Full bypass (admin + suppress) | v2/v3/express | `unleash bypass` |
+| Full bypass (admin + suppress) | v2 / v3 / express | `unleash bypass` |
 | Suppress only (no user) | v3 only | `unleash suppress` |
 | Backup + Restore | express only | `unleash backup / restore` |
-| Dual-boot | dualboot.sh | `unleash dualboot` |
-| Status check | v3 verify | `unleash status` |
-| Auto-detect Recovery | partial | Always |
-| FileVault unlock | v3 | Yes |
-| Org MDM host blocking | v3 | Yes |
-| Daemon disable (durable) | v3 | Yes |
-| Interactive menu | all | Yes |
-| CLI flags | none | Yes |
+| Dual-boot target | `dualboot.sh` | `unleash dualboot` |
+| Status & health check | `v3 --verify` | `unleash status` |
+| Auto-detect Recovery | partial | always |
+| FileVault unlock | v3 only | always |
+| Org MDM host blocking | v3 | always |
+| Launchd daemon disable | v3 | always |
+| User-level cleanup | — | yes |
+| Interactive menu | brew-based | native |
+| CLI flags | none | yes |
+
+---
 
 ## Quick Start
 
-### From an external SSD (recommended)
+### From an External SSD (recommended)
 
-1. Copy the `unleash` folder to your SSD
-2. Boot into Recovery mode (hold Power on Apple Silicon)
-3. Open Terminal → `chmod +x "/Volumes/YourSSD/unleash/unleash"`
-4. Run: `"/Volumes/YourSSD/unleash/unleash"`
+1. Copy the `unleash` folder to an external SSD (FAT32, APFS, or exFAT)
+2. Boot into Recovery mode:
+   - **Apple Silicon**: hold the Power button → Options → Continue
+   - **Intel**: `Cmd+R` at startup
+3. Open **Terminal** from the Utilities menu
+4. Make the script executable and run it:
+   ```bash
+   chmod +x "/Volumes/YourSSD/unleash/unleash"
+   "/Volumes/YourSSD/unleash/unleash"
+   ```
 
-### One-liner (download)
+### One-Liner (Download)
+
+If you have internet access in Recovery:
 
 ```bash
-curl -L https://raw.githubusercontent.com/mateussiqueira/unleash/main/unleash -o unleash
-chmod +x unleash && ./unleash bypass
+curl -L https://raw.githubusercontent.com/mateussiqueira/unleash/main/unleash -o /tmp/unleash
+chmod +x /tmp/unleash && /tmp/unleash bypass
 ```
 
-### Commands
+### Standalone (No Dependencies)
 
-| Command | Description |
-|---------|-------------|
-| `./unleash` | Interactive menu (auto-detects mode) |
-| `./unleash bypass` | Full bypass — create admin + suppress MDM |
-| `./unleash suppress` | Suppress enrollment only (no user) |
-| `./unleash backup` | Backup current state |
-| `./unleash restore` | Restore from backup |
-| `./unleash dualboot` | Target a dual-boot volume (needs sudo) |
-| `./unleash status` | Check MDM status |
-| `./unleash version` | Show version |
+```bash
+cp /Volumes/YourSSD/unleash/unleash-standalone.sh /tmp/unleash
+chmod +x /tmp/unleash && /tmp/unleash bypass
+```
 
-## Safety
+---
 
-- All writes target the **Data volume** (SSV-safe on Apple Silicon)
-- Backups can restore original state
-- Never runs `profiles renew`
-- Never touches Apple Business Manager records
+## Commands
+
+### `unleash bypass` — Full Bypass
+
+Creates a temporary admin account and suppresses MDM enrollment.
+
+```bash
+./unleash bypass
+```
+
+**What it does:**
+1. Locates and mounts the macOS Data volume
+2. Unlocks FileVault if needed (prompts for password)
+3. Creates a local admin user (default: `Apple / 1234`)
+4. Removes DEP (Device Enrollment Program) activation records
+5. Blocks Apple and organization MDM domains via `/etc/hosts`
+6. Disables enrollment launch daemons
+7. Sets `.AppleSetupDone` so Setup Assistant is skipped
+
+> **Must run from Recovery mode.**
+
+### `unleash suppress` — Suppress Only
+
+Suppresses MDM enrollment without creating a user. Ideal after a clean bypass breaks (e.g., after macOS update).
+
+```bash
+./unleash suppress
+```
+
+Can also run from a normal booted system (sudo not required — targets the currently-mounted Data volume).
+
+### `unleash status` — Health Check
+
+Audits the current MDM state and reports what artifacts are present or missing:
+
+```bash
+./unleash status
+```
+
+Checks:
+- DEP marker files (present/absent)
+- Blocked domains in hosts
+- Launchd daemon overrides
+- Profiles enrollment status
+- Backup existence
+
+### `unleash backup` — Backup State
+
+Saves the current hosts, Configuration Profiles, and launchd override:
+
+```bash
+./unleash backup
+```
+
+Backup location: `.unleash-backup/` inside the unleash folder.
+
+### `unleash restore` — Restore State
+
+Restores the original hosts, profiles, and launchd state from backup:
+
+```bash
+./unleash restore
+```
+
+### `unleash dualboot` — Target External/Dual-Boot Volume
+
+Creates an admin account and blocks MDM on a target volume (e.g., an external macOS installation):
+
+```bash
+sudo ./unleash dualboot
+```
+
+Prompts for system volume name and data volume name.
+
+### `unleash version` — Version Info
+
+```bash
+./unleash version
+```
+
+---
+
+## How It Works
+
+MDM enrollment on macOS is a multi-layer system. Unleash addresses each layer:
+
+### Layer 1: DEP Activation Record
+
+When an organization assigns a device in Apple Business Manager, macOS creates a DEP marker file at:
+
+```
+/private/var/db/ConfigurationProfiles/Settings/
+├── .cloudConfigRecordFound        ← "this serial belongs to ABM"
+├── .cloudConfigHasActivationRecord ← "enrollment has been triggered"
+└── .cloudConfigTimerCheck         ← "check again periodically"
+```
+
+**Unleash removes** these and creates decoy files (`.cloudConfigRecordNotFound`, `.cloudConfigProfileInstalled`) to signal "no enrollment needed."
+
+### Layer 2: Network-Level Blocking
+
+The enrollment client contacts Apple and organization servers. Without network access, it cannot download the MDM profile.
+
+**Unleash blocks** via `/etc/hosts`:
+
+| Domain | Purpose |
+|--------|---------|
+| `iprofiles.apple.com` | Configuration profile delivery |
+| `deviceenrollment.apple.com` | DEP enrollment service |
+| `mdmenrollment.apple.com` | MDM enrollment service |
+| `acmdm.apple.com` | Apple Configurator MDM |
+| `albert.apple.com` | ABM app/device assignment |
+| `gdmf.apple.com` | Mobile device management framework |
+| `configuration.apple.com` | Configuration service |
+| `xp.apple.com` | Device management |
+| `gs.apple.com` | Device enrollment |
+| `tb.apple.com` | Device trust |
+| `vpp.itunes.apple.com` | Volume purchase program |
+| `<org-mdm-host>` | Organization-specific MDM server (extracted from DEP record) |
+
+### Layer 3: Launchd Daemon Override
+
+macOS registers enrollment daemons that run at boot and login:
+
+| Daemon | Purpose |
+|--------|---------|
+| `com.apple.ManagedClient.enroll` | Main enrollment daemon |
+| `com.apple.ManagedClient.cloudConfiguration` | Cloud configuration fetcher |
+| `com.apple.mdmclient.daemon.runatboot` | MDM client at boot |
+| `com.apple.activationd` | Device activation |
+
+**Unleash disables** these via the launchd `disabled.plist` override at:
+
+```
+/private/var/db/com.apple.xpc.launchd/disabled.plist
+```
+
+### Layer 4: User-Level Cleanup
+
+User home directories can carry MDM artifacts that trigger re-enrollment after login:
+
+```
+~/Library/Preferences/com.apple.mdm.*
+~/Library/Application Support/com.apple.ManagedClient/
+~/Library/LaunchAgents/com.apple.mdm.*
+```
+
+**Unleash removes** these from all user directories on the Data volume.
+
+---
+
+## Intel vs Apple Silicon
+
+Apple Silicon (M1/M2/M3/M4) has architectural differences that make MDM bypass harder:
+
+| Aspect | Intel | Apple Silicon |
+|--------|-------|---------------|
+| System Volume | Writable with SIP disabled | Cryptographically signed (SSV) — read-only |
+| Recovery Mode | `Cmd+R` at boot | Hold Power button |
+| FileVault unlock | Via `diskutil apfs unlockVolume` | Same, but requires user password or recovery key |
+| Enrollment daemons | Fewer | `activationd` + additional cloud config daemons |
+| NVRAM persistence | NVRAM has some MDM flags | More flags stored in firmware |
+| Migration Assistant | Safe to migrate | **Carries MDM state** — see below |
+
+> On Apple Silicon, always use the **full bypass** (`unleash bypass`) from Recovery. The `suppress` command alone may not be sufficient after Migration Assistant.
+
+---
+
+## Migration Assistant — Known Failure Mode
+
+Using Migration Assistant from an Intel Mac to an Apple Silicon Mac **will copy the full MDM enrollment state**, including:
+
+- DEP activation records
+- Enrolled configuration profiles
+- User-level MDM preferences and caches
+- Launch agents that re-trigger enrollment
+- Keychain identity certificates
+
+### Symptoms
+
+- Remote Management screen appears **after the first reboot**
+- Running `unleash suppress` or the old v3 script makes it go away temporarily
+- MDM profile **returns within ~1 minute** of login
+
+### Why the Current Scripts Fail
+
+The original `suppress.sh` only handles system-level artifacts (DEP markers, hosts block, launchd override). After Migration Assistant, there are **user-level artifacts** in `~/Library/Preferences/` and `~/Library/Application Support/` that re-establish enrollment on every login. The hosts file block is also insufficient — the enrollment client may use cached DNS or direct IP connections.
+
+### Solution: Three-Phase Approach
+
+**Phase 1 — Recovery (full cleanup):**
+
+```bash
+# Boot from Recovery, mount Data volume
+DISK=$(diskutil apfs list | awk '/\(Data\)/ && match($0, /disk[0-9]+s[0-9]+/) {print substr($0, RSTART, RLENGTH)}')
+diskutil mount "$DISK"
+DV="/Volumes/$(diskutil info "$DISK" | awk -F': *' '/Volume Name/{print $2}' | xargs)"
+cd "$DV"
+
+# Remove DEP records
+rm -f private/var/db/ConfigurationProfiles/Settings/.cloudConfig*
+
+# Clean ALL user directories of MDM artifacts
+for home in Users/*; do
+  [ -d "$home/Library" ] || continue
+  rm -rf "$home/Library/Preferences/com.apple.mdm"*
+  rm -rf "$home/Library/Application Support/com.apple.ManagedClient"*
+  rm -rf "$home/Library/LaunchAgents/com.apple.mdm"*
+done
+
+# Expand domain blocking
+cat >> private/etc/hosts << 'EOF'
+
+0.0.0.0 iprofiles.apple.com
+0.0.0.0 deviceenrollment.apple.com
+0.0.0.0 mdmenrollment.apple.com
+0.0.0.0 acmdm.apple.com
+0.0.0.0 albert.apple.com
+0.0.0.0 gdmf.apple.com
+0.0.0.0 configuration.apple.com
+0.0.0.0 xp.apple.com
+0.0.0.0 gs.apple.com
+::     (same list with IPv6)
+EOF
+
+# Disable all enrollment daemons
+PB=/usr/libexec/PlistBuddy
+LDP=private/var/db/com.apple.xpc.launchd/disabled.plist
+for label in com.apple.ManagedClient.enroll com.apple.ManagedClient.cloudConfiguration \
+             com.apple.mdmclient.daemon.runatboot com.apple.activationd; do
+  $PB -c "Add :$label bool true" "$LDP" 2>/dev/null || $PB -c "Set :$label true" "$LDP"
+done
+```
+
+**Phase 2 — Boot and Act Fast:**
+
+1. Boot normally. If the MDM screen appears, **do not interact** — force reboot (hold Power).
+2. On login, immediately run:
+   ```bash
+   sudo profiles -D
+   sudo pkill -f ManagedClient
+   sudo pkill -f mdmclient
+   ```
+
+**Phase 3 — Network-Level Firewall:**
+
+The hosts file is weak. For durability, use a firewall:
+- **Little Snitch** — commercial, per-app rules
+- **LuLu** — free, open-source
+- **pf firewall** — built-in, blocks Apple IP ranges
+
+---
+
+## Troubleshooting
+
+### MDM screen reappears after reboot
+
+Run `unleash suppress` from Recovery again. If it still returns, you likely have **user-level artifacts** from Migration Assistant. Follow the [Solution section](#solution-three-phase-approach) above.
+
+### "profiles" command still shows enrollment
+
+The `profiles` command reads from the system volume (SSV) which is read-only on Apple Silicon. This is cosmetic — if DEP markers are removed and daemons are disabled, enrollment won't activate. Run `unleash status` to check the actual Data volume state.
+
+### FileVault unlock fails
+
+Ensure you have:
+- The password of any user on the Mac, OR
+- The FileVault recovery key (shown during FileVault setup)
+
+If neither is available, the Data volume cannot be mounted from Recovery.
+
+### "Not a macOS Data volume" error
+
+The script checks for the presence of:
+
+```
+/private/var/db/dslocal/nodes/Default
+```
+
+If this directory is missing, you may have selected the wrong disk. Run `diskutil list` to identify the correct Data volume.
+
+### Dual-boot volume not found
+
+The default names are `Macintosh HD` (system) and `Macintosh HD - Data` (data). If your volumes have different names (e.g., external disk name), provide them when prompted.
+
+---
 
 ## Architecture
 
 ```
 unleash/
-├── unleash          # Single entry point (CLI + interactive)
+├── unleash                   # Single entry point (CLI + interactive)
+├── unleash-standalone.sh     # Self-contained variant (no lib/ dependency)
 ├── lib/
-│   ├── colors.sh    # UI colors and helpers
-│   ├── detect.sh    # Volume detection, Recovery/dualboot mode
-│   ├── validate.sh  # Username/password validation
-│   ├── dscl.sh      # Directory Services operations
-│   ├── suppress.sh  # Core MDM suppression logic
-│   ├── backup.sh    # Backup and restore
-│   └── status.sh    # Verify and status check
+│   ├── colors.sh             # Color codes, logging, user prompts
+│   ├── detect.sh             # Recovery mode detection, Data volume resolution
+│   ├── validate.sh           # Username/password validation
+│   ├── dscl.sh               # Directory Services user CRUD
+│   ├── suppress.sh           # DEP removal, hosts blocking, launchd disable
+│   ├── backup.sh             # State backup and restore
+│   └── status.sh             # Health check and audit
 ├── examples/
+│   ├── build-standalone.sh   # Builds the standalone variant
+│   └── quickstart.sh         # Example automation script
 ├── README.md
-└── LICENSE
+└── LICENSE (MIT)
 ```
 
-## Legal
+### Design Principles
 
-This only suppresses MDM locally. Your serial stays in the org's Apple Business Manager. The permanent fix is them releasing it.
+1. **SSV-safe**: All writes target the Data volume. The system volume (SSV) is never modified.
+2. **Idempotent**: Running multiple times is safe. Already-blocked domains and disabled daemons are detected and skipped.
+3. **Reversible**: `unleash backup` saves the original state; `unleash restore` reverts it.
+4. **Recovery-first**: The full bypass requires Recovery mode, ensuring the Data volume is unmounted from the running OS.
 
-Use on devices you own. I'm not responsible for what you do with this.
+---
+
+## Safety & Limitations
+
+### What Unleash Does NOT Do
+
+- ❌ Remove your device from Apple Business Manager — only the organization can do that
+- ❌ Modify the signed system volume (SSV)
+- ❌ Run `profiles renew` (which would re-enroll the device)
+- ❌ Wipe data or erase content
+
+### Known Limitations
+
+| Limitation | Workaround |
+|------------|------------|
+| After macOS update, daemons may re-enable | Run `unleash suppress` again |
+| Hosts file can be bypassed by cached DNS | Use `dscacheutil -flushcache` |
+| IPv6 may not be blocked if only IPv4 entries added | Unleash adds both (:: and 0.0.0.0) |
+| Migration Assistant carries MDM state | Use the three-phase solution above |
+| `profiles status` shows enrollment | This is the SSV's view; daemon disable takes precedence |
+
+---
+
+## FAQ
+
+**Q: Does this work on macOS Sequoia?**  
+A: Yes. Tested up to macOS 15.x (Sequoia) on both Intel and Apple Silicon.
+
+**Q: Do I need to disable SIP?**  
+A: No. All operations target the Data volume, which does not require SIP to be disabled.
+
+**Q: Will this survive an OS reinstall?**  
+A: No. A fresh install clears the Data volume. You must re-run Unleash after reinstalling macOS.
+
+**Q: Can the organization still track this device?**  
+A: The serial number remains in ABM. If the device connects to the internet and the MDM daemon re-enables, it will re-enroll. This is why the daemon disable and hosts block are both needed.
+
+**Q: What if I need iCloud or App Store?**  
+A: The hosts block is broad. Use a per-app firewall (Little Snitch, LuLu) for selective blocking instead.
+
+**Q: Why does MDM come back after Migration Assistant?**  
+A: Because MA copies user-level MDM caches, preferences, and launch agents. See [Migration Assistant section](#migration-assistant--known-failure-mode).
+
+---
+
+## Development
+
+```bash
+# Build standalone (bundles all lib/ into one file)
+bash examples/build-standalone.sh
+
+# Test the suppress logic
+sudo ./unleash suppress --dry-run
+```
+
+### Pull Requests
+
+Contributions welcome, especially for:
+- Additional MDM domains to block
+- New launch daemon labels discovered on newer macOS versions
+- Migration Assistant detection logic
+- iCloud/MDM domain whitelist for selective blocking
+
+---
+
+## License
+
+MIT. See [LICENSE](LICENSE).
