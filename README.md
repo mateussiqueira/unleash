@@ -452,7 +452,7 @@ Check if it's already running (`monitor-status`). Check permissions — it needs
 ## FAQ
 
 **What macOS versions are supported?**
-12.x (Monterey) through 15.x (Sequoia) and 26.x (Tahoe). Tested on Intel T2, M1, M2, M3, M4.
+12.x (Monterey) through 15.x (Sequoia), 26.x (Tahoe), and 27.x. Tested on Intel T2, M1, M2, M3, M4, M5.
 
 **Do I need to disable SIP?**
 No. All writes target the Data volume.
