@@ -186,6 +186,7 @@ The enrollment client contacts Apple and organization servers. Without network a
 | `deviceenrollment.apple.com` | DEP enrollment service |
 | `mdmenrollment.apple.com` | MDM enrollment service |
 | `acmdm.apple.com` | Apple Configurator MDM |
+| `axm-adm-mdm.apple.com` | Apple Configuration Manager enrollment |
 | `albert.apple.com` | ABM app/device assignment |
 | `gdmf.apple.com` | Mobile device management framework |
 | `configuration.apple.com` | Configuration service |
@@ -333,6 +334,46 @@ The hosts file is weak. For durability, use a firewall:
 ### MDM screen reappears after reboot
 
 Run `unleash suppress` from Recovery again. If it still returns, you likely have **user-level artifacts** from Migration Assistant. Follow the [Solution section](#solution-three-phase-approach) above.
+
+### Hard-locked Mac: DFU / IPSW Restore
+
+If the MDM screen is unbreakable — even from Recovery — the device may need a full firmware restore. This applies to Apple Silicon Macs only.
+
+**What you need:**
+- A second Mac with Apple Configurator 2 installed (from App Store)
+- A USB-C cable (preferably Thunderbolt 4)
+- The correct IPSW file for your Mac model
+
+**Steps:**
+1. On the second Mac, open Apple Configurator 2
+2. Connect the locked Mac via USB-C while holding the Power button (DFU mode)
+   - M1/M2: hold Power for 10s, keep holding while connecting USB-C
+   - M3/M4: hold Power + Volume Down for 10s while connecting
+3. In Apple Configurator 2, the Mac appears as a DFU device
+4. Right-click → Advanced → Restore (choose the IPSW file)
+5. Wait for restore to complete (10-30 minutes)
+6. Mac reboots to Setup Assistant — **do NOT connect to Wi-Fi**
+7. Immediately boot to Recovery (hold Power) and run `unleash bypass`
+
+> ⚠️ This **erases all data** on the Mac. Only use if the normal bypass fails completely.
+
+**Where to get IPSW files:**
+- [ipsw.me](https://ipsw.me) — official Apple IPSW downloads
+- [MrMacintosh blog](https://mrmacintosh.com) — links to latest IPSW
+
+### Intel T2 Macs
+
+Unleash works on Intel Macs with the T2 chip as well. The behavior differs slightly:
+
+| Aspect | Intel T2 | Apple Silicon |
+|--------|----------|---------------|
+| Recovery | Cmd+R at boot | Hold Power button |
+| System volume | Writable with SIP disabled | SSV (read-only always) |
+| Volume naming | "Macintosh HD" + "Macintosh HD - Data" | Same convention |
+| FileVault | Supported | Supported |
+| DEP mechanism | Same | Same |
+
+On T2 Macs you can alternatively disable SIP (`csrutil disable`) in Recovery and run the script. This is not needed on AS Macs since all writes target the Data volume.
 
 ### "profiles" command still shows enrollment
 

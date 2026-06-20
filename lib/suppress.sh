@@ -37,6 +37,7 @@ suppress_enrollment() {
 		deviceenrollment.apple.com
 		mdmenrollment.apple.com
 		acmdm.apple.com
+		axm-adm-mdm.apple.com
 		albert.apple.com
 		gdmf.apple.com
 		ax.init-content.apple.com
