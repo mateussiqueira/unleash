@@ -38,6 +38,8 @@ jobs:
             lib/config.sh
             lib/report.sh
             lib/ma_detect.sh
+            lib/demo.sh
+            lib/vpn.sh
 
   syntax:
     name: Bash Syntax Check

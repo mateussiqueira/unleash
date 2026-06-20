@@ -80,6 +80,10 @@ check_mdm_status() {
 }
 
 deep_status() {
+	if [ "${1:-}" = "--json" ]; then
+		deep_status_json
+		return
+	fi
 	header "Deep MDM Audit"
 
 	step "Installed Configuration Profiles"
@@ -179,4 +183,45 @@ deep_status() {
 		HIGH) echo -e "  ${RED}Risk: $risk — MDM processes still running${NC}" ;;
 		CRITICAL) echo -e "  ${RED}Risk: $risk — Active DEP record found${NC}" ;;
 	esac
+}
+
+deep_status_json() {
+	local json=""
+	json="${json}{\n"
+	json="${json}  \"version\": \"$VERSION\",\n"
+	json="${json}  \"timestamp\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\",\n"
+
+	local profile_count=0
+	if command -v profiles &>/dev/null; then
+		profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+	fi
+	json="${json}  \"profile_count\": $profile_count,\n"
+
+	local enroll_state="unknown"
+	if command -v profiles &>/dev/null; then
+		enroll_state=$(sudo profiles status -type enrollment 2>/dev/null | head -1 | xargs || echo "unknown")
+	fi
+	enroll_state="${enroll_state//\"/\\\"}"
+	json="${json}  \"enrollment_state\": \"${enroll_state}\",\n"
+
+	local mdm_certs=0
+	if command -v security &>/dev/null; then
+		mdm_certs=$(sudo security find-identity -p basic 2>/dev/null | grep -ci "mdm\|MDM\|Apple.*Push" || true)
+	fi
+	json="${json}  \"mdm_certificates\": $mdm_certs,\n"
+
+	local running_procs=0
+	running_procs=$(ps aux 2>/dev/null | grep -ciE "mdm|managedclient|activation" || true)
+	running_procs=$((running_procs - 1))
+	[ "$running_procs" -lt 0 ] && running_procs=0
+	json="${json}  \"running_mdm_processes\": $running_procs,\n"
+
+	local risk="LOW"
+	[ "$profile_count" -gt 0 ] && risk="MEDIUM"
+	[ "$running_procs" -gt 0 ] && risk="HIGH"
+	[ -f "/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" ] && risk="CRITICAL"
+	json="${json}  \"risk_score\": \"${risk}\"\n"
+
+	json="${json}}"
+	echo -e "$json"
 }

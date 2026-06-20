@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-VERSION="1.4.0"
+VERSION="1.5.0"
 RED='\033[1;31m'
 GRN='\033[1;32m'
 BLU='\033[1;34m'
@@ -759,6 +759,10 @@ check_mdm_status() {
 }
 
 deep_status() {
+	if [ "${1:-}" = "--json" ]; then
+		deep_status_json
+		return
+	fi
 	header "Deep MDM Audit"
 
 	step "Installed Configuration Profiles"
@@ -858,6 +862,47 @@ deep_status() {
 		HIGH) echo -e "  ${RED}Risk: $risk — MDM processes still running${NC}" ;;
 		CRITICAL) echo -e "  ${RED}Risk: $risk — Active DEP record found${NC}" ;;
 	esac
+}
+
+deep_status_json() {
+	local json=""
+	json="${json}{\n"
+	json="${json}  \"version\": \"$VERSION\",\n"
+	json="${json}  \"timestamp\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\",\n"
+
+	local profile_count=0
+	if command -v profiles &>/dev/null; then
+		profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+	fi
+	json="${json}  \"profile_count\": $profile_count,\n"
+
+	local enroll_state="unknown"
+	if command -v profiles &>/dev/null; then
+		enroll_state=$(sudo profiles status -type enrollment 2>/dev/null | head -1 | xargs || echo "unknown")
+	fi
+	enroll_state="${enroll_state//\"/\\\"}"
+	json="${json}  \"enrollment_state\": \"${enroll_state}\",\n"
+
+	local mdm_certs=0
+	if command -v security &>/dev/null; then
+		mdm_certs=$(sudo security find-identity -p basic 2>/dev/null | grep -ci "mdm\|MDM\|Apple.*Push" || true)
+	fi
+	json="${json}  \"mdm_certificates\": $mdm_certs,\n"
+
+	local running_procs=0
+	running_procs=$(ps aux 2>/dev/null | grep -ciE "mdm|managedclient|activation" || true)
+	running_procs=$((running_procs - 1))
+	[ "$running_procs" -lt 0 ] && running_procs=0
+	json="${json}  \"running_mdm_processes\": $running_procs,\n"
+
+	local risk="LOW"
+	[ "$profile_count" -gt 0 ] && risk="MEDIUM"
+	[ "$running_procs" -gt 0 ] && risk="HIGH"
+	[ -f "/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" ] && risk="CRITICAL"
+	json="${json}  \"risk_score\": \"${risk}\"\n"
+
+	json="${json}}"
+	echo -e "$json"
 }
 
 
@@ -1964,6 +2009,10 @@ do_uninstall() {
 }
 
 generate_report() {
+  if [ "${1:-}" = "--json" ]; then
+    generate_report_json
+    return
+  fi
   header "Unleash System Report"
 
   local ts
@@ -2056,6 +2105,66 @@ generate_report() {
   fi
 }
 
+generate_report_json() {
+  local report=""
+  report="${report}{\n"
+
+  report="${report}  \"version\": \"$VERSION\",\n"
+  report="${report}  \"timestamp\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\",\n"
+
+  local enroll_state="unknown"
+  if command -v profiles &>/dev/null; then
+    enroll_state=$(sudo profiles status -type enrollment 2>/dev/null | head -1 | xargs || echo "unknown")
+  fi
+  enroll_state="${enroll_state//\"/\\\"}"
+  report="${report}  \"enrollment_state\": \"${enroll_state}\",\n"
+
+  local has_dep="false"
+  if [ -f "/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" ]; then
+    has_dep="true"
+  fi
+  report="${report}  \"dep_record_found\": $has_dep,\n"
+
+  local profile_count=0
+  if command -v profiles &>/dev/null; then
+    profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+  fi
+  report="${report}  \"installed_profiles\": $profile_count,\n"
+
+  local heal_installed="false"
+  [ -f "/Library/LaunchDaemons/com.unleash.heal.plist" ] && heal_installed="true"
+  local monitor_installed="false"
+  [ -f "/Library/LaunchDaemons/com.unleash.monitor.plist" ] && monitor_installed="true"
+  local monitor_running="false"
+  [ -f "/tmp/unleash-monitor.pid" ] && monitor_running="true"
+  report="${report}  \"persistence\": {\n"
+  report="${report}    \"heal_launchdaemon\": $heal_installed,\n"
+  report="${report}    \"monitor_launchdaemon\": $monitor_installed,\n"
+  report="${report}    \"monitor_running\": $monitor_running\n"
+  report="${report}  },\n"
+
+  local fw_active="false"
+  if command -v pfctl &>/dev/null && pfctl -a "com.unleash/mdm" -s rules 2>/dev/null | grep -q "block"; then
+    fw_active="true"
+  fi
+  local selective_active="false"
+  if command -v pfctl &>/dev/null && pfctl -a "com.unleash.selective" -s rules 2>/dev/null | grep -q "block"; then
+    selective_active="true"
+  fi
+  report="${report}  \"firewall\": {\n"
+  report="${report}    \"mdm_block_active\": $fw_active,\n"
+  report="${report}    \"selective_block_active\": $selective_active\n"
+  report="${report}  },\n"
+
+  local hosts_blocked=0
+  hosts_blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || echo 0)
+  report="${report}  \"hosts_blocked\": $hosts_blocked\n"
+
+  report="${report}}"
+
+  echo -e "$report"
+}
+
 detect_migration_assistant() {
   local data_mount="${1:-}"
 
@@ -2121,6 +2230,209 @@ detect_migration_assistant() {
   fi
 }
 
+run_demo() {
+  header "Unleash Demo — Simulated MDM Bypass"
+
+  local demo_dir
+  demo_dir=$(mktemp -d)
+  mkdir -p "$demo_dir/private/etc"
+  mkdir -p "$demo_dir/private/var/db/ConfigurationProfiles/Settings"
+  mkdir -p "$demo_dir/private/var/db/com.apple.xpc.launchd"
+  mkdir -p "$demo_dir/Users/demo/Library/Preferences"
+  mkdir -p "$demo_dir/Users/demo/Library/Application Support"
+
+  touch "$demo_dir/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound"
+  touch "$demo_dir/Users/demo/Library/Preferences/com.apple.mdm.plist"
+
+  echo ""
+  step "1. Simulating pre-bypass MDM state"
+  echo "     DEP record:      ${RED}PRESENT${NC}"
+  echo "     Hosts block:     ${RED}ABSENT${NC}"
+  echo "     Daemon override: ${RED}ABSENT${NC}"
+  echo "     User artifacts:  ${RED}PRESENT${NC}"
+  sleep 1
+
+  echo ""
+  step "2. Running suppress_enrollment..."
+  DRY_RUN=false
+  suppress_enrollment "$demo_dir" 2>/dev/null || true
+  sleep 1
+
+  echo ""
+  step "3. Verifying post-bypass state"
+  local clean=true
+  if [ -f "$demo_dir/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" ]; then
+    echo "     DEP record:      ${RED}STILL PRESENT (bug)${NC}"
+    clean=false
+  else
+    echo "     DEP record:      ${GRN}CLEARED${NC}"
+  fi
+  if grep -q "iprofiles.apple.com" "$demo_dir/private/etc/hosts" 2>/dev/null; then
+    echo "     Hosts block:     ${GRN}ACTIVE${NC}"
+  else
+    echo "     Hosts block:     ${RED}ABSENT (bug)${NC}"
+    clean=false
+  fi
+  if [ -f "$demo_dir/Users/demo/Library/Preferences/com.apple.mdm.plist" ]; then
+    echo "     User artifacts:  ${RED}STILL PRESENT (bug)${NC}"
+    clean=false
+  else
+    echo "     User artifacts:  ${GRN}CLEANED${NC}"
+  fi
+
+  echo ""
+  step "4. Simulating macOS update (re-enabling daemons)"
+  rm -f "$demo_dir/private/var/db/com.apple.xpc.launchd/disabled.plist"
+  echo "     Daemon override: ${RED}RESET (simulating update)${NC}"
+  sleep 1
+
+  echo ""
+  step "5. Running heal — detecting and fixing..."
+  heal_suppress "$demo_dir" 2>/dev/null || true
+  sleep 1
+
+  if [ -f "$demo_dir/private/var/db/com.apple.xpc.launchd/disabled.plist" ]; then
+    echo "     Daemon override: ${GRN}RESTORED${NC}"
+  fi
+
+  echo ""
+  step "6. Summary"
+  if [ "$clean" = true ]; then
+    echo -e "   ${GRN}✓ Demo completed successfully${NC}"
+  else
+    echo -e "   ${YEL}⚠ Demo completed with warnings${NC}"
+  fi
+  echo "   Simulated environment: $demo_dir"
+  echo ""
+  info "This is a simulated run. No real system was modified."
+  info "Run 'rm -rf $demo_dir' to clean up."
+
+  echo ""
+  echo -e "${CYAN}╔═══════════════════════════════════════════════╗${NC}"
+  echo -e "${CYAN}║${NC}  ${GRN}Demo Complete${NC}                                         ${CYAN}║${NC}"
+  echo -e "${CYAN}║${NC}  Commands used: suppress, heal                    ${CYAN}║${NC}"
+  echo -e "${CYAN}║${NC}  Try: ${YEL}sudo ./unleash doctor${NC}  for real diagnostics       ${CYAN}║${NC}"
+  echo -e "${CYAN}╚═══════════════════════════════════════════════╝${NC}"
+}
+
+VPN_RULES_ANCHOR="com.unleash/vpn-kill"
+VPN_RULES_FILE="/etc/pf.anchors/com.unleash/vpn-kill"
+
+vpn_kill_install() {
+  header "VPN Kill-Switch — MDM Leak Protection"
+
+  if ! is_root; then
+    error_exit "VPN kill-switch needs sudo: sudo ./unleash vpn-kill"
+  fi
+
+  local vpn_if=""
+
+  step "Detecting active VPN interfaces..."
+  local interfaces
+  interfaces=$(ifconfig 2>/dev/null | grep -E "^utun[0-9]+:" | sed 's/:.*//' || true)
+  if [ -z "$interfaces" ]; then
+    warn "No VPN interfaces detected"
+    info "You can specify manually: sudo ./unleash vpn-kill --interface utunX"
+    info "Common VPN interfaces: utun0-9 (WireGuard), utun10+ (OpenVPN), ppp0 (L2TP)"
+  else
+    for iface in $interfaces; do
+      local addr
+      addr=$(ifconfig "$iface" 2>/dev/null | awk '/inet /{print $2}')
+      if [ -n "$addr" ]; then
+        echo "   $iface: $addr"
+        [ -z "$vpn_if" ] && vpn_if="$iface"
+      fi
+    done
+  fi
+
+  local user_if="${2:-}"
+  [ -n "$user_if" ] && vpn_if="$user_if"
+
+  if [ -z "$vpn_if" ]; then
+    warn "No active VPN detected. Installing kill-switch anyway (no default route)."
+    info "Usage: sudo ./unleash vpn-kill --interface utunX"
+    return 1
+  fi
+
+  step "Installing pf rules for VPN kill-switch..."
+  local anchor_dir="/etc/pf.anchors/com.unleash"
+  mkdir -p "$anchor_dir"
+
+  cat > "$VPN_RULES_FILE" << RULES
+# Unleash VPN kill-switch
+# Only allow MDM traffic through VPN interface $vpn_if
+block drop out proto {tcp,udp} to {17.0.0.0/8, 17.128.0.0/10}
+pass out proto {tcp,udp} to {17.0.0.0/8, 17.128.0.0/10} no state
+pass on $vpn_if
+RULES
+  chmod 644 "$VPN_RULES_FILE"
+  success "VPN kill-switch rules installed for $vpn_if"
+
+  local pf_conf="/etc/pf.conf"
+  local anchor_line="anchor \"${VPN_RULES_ANCHOR}\""
+  local load_line="load anchor \"${VPN_RULES_ANCHOR}\" from \"${VPN_RULES_FILE}\""
+
+  if grep -q "vpn-kill" "$pf_conf" 2>/dev/null; then
+    info "pf.conf already has VPN kill-switch anchor"
+  else
+    echo "" >> "$pf_conf"
+    echo "# Added by unleash — VPN kill-switch (prevents MDM leaks)" >> "$pf_conf"
+    echo "$anchor_line" >> "$pf_conf"
+    echo "$load_line" >> "$pf_conf"
+  fi
+
+  pfctl -e -f "$pf_conf" 2>/dev/null && success "VPN kill-switch active" \
+    || warn "pfctl failed"
+
+  echo ""
+  info "What this does:"
+  info "  - Blocks MDM Apple IP ranges (17.0.0.0/8) on all interfaces"
+  info "  - Only allows MDM traffic through VPN interface ($vpn_if)"
+  info "  - If VPN drops, MDM traffic is blocked — no leaks"
+  echo ""
+  warn "This does NOT affect your regular internet traffic."
+  warn "Only MDM-related IPs are routed through the VPN kill-switch."
+}
+
+vpn_kill_remove() {
+  header "Remove VPN Kill-Switch"
+
+  if ! is_root; then
+    error_exit "Needs sudo: sudo ./unleash vpn-kill-remove"
+  fi
+
+  if [ -f "$VPN_RULES_FILE" ]; then
+    rm -f "$VPN_RULES_FILE"
+    success "VPN kill-switch rules removed"
+  fi
+
+  local pf_conf="/etc/pf.conf"
+  if [ -f "$pf_conf" ]; then
+    sed -i '' '/# Added by unleash — VPN kill-switch/d' "$pf_conf" 2>/dev/null || true
+    sed -i '' '/vpn-kill/d' "$pf_conf" 2>/dev/null || true
+    success "pf.conf cleaned"
+  fi
+
+  pfctl -a "$VPN_RULES_ANCHOR" -F all 2>/dev/null || true
+  success "pf anchor flushed"
+}
+
+vpn_kill_status() {
+  step "VPN kill-switch status"
+  if [ -f "$VPN_RULES_FILE" ]; then
+    echo "  Rules file: $VPN_RULES_FILE"
+    cat "$VPN_RULES_FILE" | sed 's/^/    /'
+  else
+    echo "  No VPN kill-switch installed"
+  fi
+  if command -v pfctl &>/dev/null; then
+    echo ""
+    pfctl -a "$VPN_RULES_ANCHOR" -s rules 2>/dev/null \
+      && echo "  Anchor loaded" \
+      || echo "  Anchor not loaded"
+  fi
+}
+
 
 show_help() {
 	cat <<'HELP'
@@ -2168,6 +2480,12 @@ Bypass / suppress / monitor MDM enrollment on macOS.
     report          Generate a full markdown status report
     history         Show event log from monitor/heal runs
     test            Dry-run mode: simulate without changing anything
+    demo            Run simulated bypass flow (no real changes)
+
+  VPN:
+    vpn-kill        Install VPN kill-switch (prevents MDM leaks outside VPN)
+    vpn-kill-remove Remove VPN kill-switch
+    vpn-kill-status Check VPN kill-switch status
 
   Management:
     config          View/edit persistent settings (~/.unleash.conf)
@@ -2197,6 +2515,9 @@ ALIASES
     up              update
     uni             uninstall
     rei             reinstall
+    vk              vpn-kill
+    vkr             vpn-kill-remove
+    vks             vpn-kill-status
 
 OPTIONS
     --verbose       Show debug messages
@@ -2599,7 +2920,7 @@ main() {
 		firewall|fw)      cmd_firewall ;;
 		firewall-off|fw-off) cmd_firewall_off ;;
 		harden)           cmd_harden ;;
-		audit)            cmd_audit ;;
+		audit)            cmd_audit "$2" ;;
 		whitelist|wl)     cmd_whitelist ;;
 		backup)           cmd_backup ;;
 		restore)          cmd_restore ;;
@@ -2615,11 +2936,15 @@ main() {
 		monitor-stop|mn-stop) cmd_monitor_stop ;;
 		monitor-status|mn-st) cmd_monitor_status ;;
 		version|-v|--version) cmd_version ;;
-		doctor)           run_doctor ;;
+    doctor)           run_doctor ;;
+		demo)             run_demo ;;
 		update)           do_self_update ;;
 		uninstall)        do_uninstall ;;
-		report)           generate_report ;;
+		report)           generate_report "$2" ;;
 		config)           cmd_config "$@" ;;
+		vpn-kill)         vpn_kill_install "$@" ;;
+		vpn-kill-remove)  vpn_kill_remove ;;
+		vpn-kill-status)  vpn_kill_status ;;
 		reinstall)
 			do_uninstall
 			install_persist_launchdaemon ""

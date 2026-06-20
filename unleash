@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.4.0"
+VERSION="1.5.0"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
-for _lib in colors config detect validate dscl suppress backup status heal firewall harden whitelist check monitor history doctor selfupdate uninstall report ma_detect; do
+for _lib in colors config detect validate dscl suppress backup status heal firewall harden whitelist check monitor history doctor selfupdate uninstall report ma_detect demo vpn; do
 	_lib_path="$LIB_DIR/$_lib.sh"
 	if [ -f "$_lib_path" ]; then
 		source "$_lib_path"
@@ -62,6 +62,12 @@ Bypass / suppress / monitor MDM enrollment on macOS.
     report          Generate a full markdown status report
     history         Show event log from monitor/heal runs
     test            Dry-run mode: simulate without changing anything
+    demo            Run simulated bypass flow (no real changes)
+
+  VPN:
+    vpn-kill        Install VPN kill-switch (prevents MDM leaks outside VPN)
+    vpn-kill-remove Remove VPN kill-switch
+    vpn-kill-status Check VPN kill-switch status
 
   Management:
     config          View/edit persistent settings (~/.unleash.conf)
@@ -91,6 +97,9 @@ ALIASES
     up              update
     uni             uninstall
     rei             reinstall
+    vk              vpn-kill
+    vkr             vpn-kill-remove
+    vks             vpn-kill-status
 
 OPTIONS
     --verbose       Show debug messages
@@ -493,7 +502,7 @@ main() {
 		firewall|fw)      cmd_firewall ;;
 		firewall-off|fw-off) cmd_firewall_off ;;
 		harden)           cmd_harden ;;
-		audit)            cmd_audit ;;
+		audit)            cmd_audit "$2" ;;
 		whitelist|wl)     cmd_whitelist ;;
 		backup)           cmd_backup ;;
 		restore)          cmd_restore ;;
@@ -509,11 +518,15 @@ main() {
 		monitor-stop|mn-stop) cmd_monitor_stop ;;
 		monitor-status|mn-st) cmd_monitor_status ;;
 		version|-v|--version) cmd_version ;;
-		doctor)           run_doctor ;;
+    doctor)           run_doctor ;;
+		demo)             run_demo ;;
 		update)           do_self_update ;;
 		uninstall)        do_uninstall ;;
-		report)           generate_report ;;
+		report)           generate_report "$2" ;;
 		config)           cmd_config "$@" ;;
+		vpn-kill)         vpn_kill_install "$@" ;;
+		vpn-kill-remove)  vpn_kill_remove ;;
+		vpn-kill-status)  vpn_kill_status ;;
 		reinstall)
 			do_uninstall
 			install_persist_launchdaemon ""

@@ -1,4 +1,8 @@
 generate_report() {
+  if [ "${1:-}" = "--json" ]; then
+    generate_report_json
+    return
+  fi
   header "Unleash System Report"
 
   local ts
@@ -89,4 +93,64 @@ generate_report() {
   else
     echo "  None"
   fi
+}
+
+generate_report_json() {
+  local report=""
+  report="${report}{\n"
+
+  report="${report}  \"version\": \"$VERSION\",\n"
+  report="${report}  \"timestamp\": \"$(date -u '+%Y-%m-%dT%H:%M:%SZ')\",\n"
+
+  local enroll_state="unknown"
+  if command -v profiles &>/dev/null; then
+    enroll_state=$(sudo profiles status -type enrollment 2>/dev/null | head -1 | xargs || echo "unknown")
+  fi
+  enroll_state="${enroll_state//\"/\\\"}"
+  report="${report}  \"enrollment_state\": \"${enroll_state}\",\n"
+
+  local has_dep="false"
+  if [ -f "/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound" ]; then
+    has_dep="true"
+  fi
+  report="${report}  \"dep_record_found\": $has_dep,\n"
+
+  local profile_count=0
+  if command -v profiles &>/dev/null; then
+    profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+  fi
+  report="${report}  \"installed_profiles\": $profile_count,\n"
+
+  local heal_installed="false"
+  [ -f "/Library/LaunchDaemons/com.unleash.heal.plist" ] && heal_installed="true"
+  local monitor_installed="false"
+  [ -f "/Library/LaunchDaemons/com.unleash.monitor.plist" ] && monitor_installed="true"
+  local monitor_running="false"
+  [ -f "/tmp/unleash-monitor.pid" ] && monitor_running="true"
+  report="${report}  \"persistence\": {\n"
+  report="${report}    \"heal_launchdaemon\": $heal_installed,\n"
+  report="${report}    \"monitor_launchdaemon\": $monitor_installed,\n"
+  report="${report}    \"monitor_running\": $monitor_running\n"
+  report="${report}  },\n"
+
+  local fw_active="false"
+  if command -v pfctl &>/dev/null && pfctl -a "com.unleash/mdm" -s rules 2>/dev/null | grep -q "block"; then
+    fw_active="true"
+  fi
+  local selective_active="false"
+  if command -v pfctl &>/dev/null && pfctl -a "com.unleash.selective" -s rules 2>/dev/null | grep -q "block"; then
+    selective_active="true"
+  fi
+  report="${report}  \"firewall\": {\n"
+  report="${report}    \"mdm_block_active\": $fw_active,\n"
+  report="${report}    \"selective_block_active\": $selective_active\n"
+  report="${report}  },\n"
+
+  local hosts_blocked=0
+  hosts_blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || echo 0)
+  report="${report}  \"hosts_blocked\": $hosts_blocked\n"
+
+  report="${report}}"
+
+  echo -e "$report"
 }
