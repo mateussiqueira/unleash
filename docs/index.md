@@ -102,6 +102,8 @@ sudo ./unleash status -d
 |---------|-------------|
 | `audit` | Deep MDM scan — profiles, certificates, launch agents, risk score |
 | `check` | Pre-format / pre-upgrade assessment — will this Mac lock after wipe? |
+| `history` | Show event log from monitor/heal runs |
+| `history-clear` | Clear the event log |
 | `doctor` | Pre-flight diagnostics — root, Recovery, libs, disk, dependencies |
 | `status` | MDM enrollment status (use `-d` for deep mode) |
 | `report` | Full system report in human-readable or JSON format |
