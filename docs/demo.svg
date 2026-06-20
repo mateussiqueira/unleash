@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 400" font-family="SFMono-Regular,Consolas,monospace" font-size="13">
+  <rect width="720" height="400" fill="#1e1e2e" rx="8"/>
+  <rect x="0" y="0" width="720" height="32" fill="#181825" rx="8"/>
+  <circle cx="18" cy="16" r="6" fill="#f38ba8"/>
+  <circle cx="36" cy="16" r="6" fill="#fab387"/>
+  <circle cx="54" cy="16" r="6" fill="#a6e3a1"/>
+  <text x="360" y="22" fill="#6c7086" text-anchor="middle" font-size="12">unleash — terminal demo</text>
+
+  <text x="16" y="60" fill="#89b4fa" xml:space="preserve">$ sudo ./unleash --version</text>
+  <text x="16" y="80" fill="#cdd6f4" xml:place="preserve">unleash v1.6.0</text>
+  <text x="16" y="100" fill="#89b4fa" xml:space="preserve">$ sudo ./unleash doctor</text>
+  <text x="16" y="118" fill="#a6e3a1">✓</text>
+  <text x="32" y="118" fill="#cdd6f4">Script location: /Users/user/unleash</text>
+  <text x="16" y="134" fill="#a6e3a1">✓</text>
+  <text x="32" y="134" fill="#cdd6f4">Library files: 22/22 modules loaded</text>
+  <text x="16" y="150" fill="#a6e3a1">✓</text>
+  <text x="32" y="150" fill="#cdd6f4">Root privileges</text>
+  <text x="16" y="166" fill="#fab387">⚠</text>
+  <text x="32" y="166" fill="#cdd6f4">Recovery mode: no (limited to booted commands)</text>
+  <text x="16" y="182" fill="#a6e3a1">✓</text>
+  <text x="32" y="182" fill="#cdd6f4">pfctl available</text>
+  <text x="16" y="202" fill="#89b4fa" xml:space="preserve">$ sudo ./unleash check</text>
+  <text x="16" y="220" fill="#a6e3a1">✓</text>
+  <text x="32" y="220" fill="#cdd6f4">Recovery mode: yes</text>
+  <text x="16" y="236" fill="#a6e3a1">✓</text>
+  <text x="32" y="236" fill="#cdd6f4">Data volume: /Volumes/Data (123.4 GB free)</text>
+  <text x="16" y="252" fill="#fab387">⚠</text>
+  <text x="32" y="252" fill="#cdd6f4">FileVault: enabled (key required)</text>
+  <text x="16" y="268" fill="#a6e3a1">✓</text>
+  <text x="32" y="268" fill="#cdd6f4">MDM domains blocked: 13/13</text>
+  <text x="16" y="288" fill="#cba6f7" font-weight="bold" xml:space="preserve">VP>: SAFE TO FORMAT — no active MDM record</text>
+  <text x="16" y="312" fill="#89b4fa" xml:space="preserve">$ sudo ./unleash report --json</text>
+  <text x="16" y="330" fill="#cdd6f4">{</text>
+  <text x="16" y="346" fill="#cdd6f4">  "version": "1.6.0", "arch": "arm64",</text>
+  <text x="16" y="362" fill="#cdd6f4">  "mdm_enrolled": false, "risk_score": 0</text>
+  <text x="16" y="378" fill="#cdd6f4">}</text>
+</svg>
