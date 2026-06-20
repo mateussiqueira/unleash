@@ -8,6 +8,7 @@ NC='\033[0m'
 
 LOG_FILE=""
 VERBOSE=false
+DRY_RUN=false
 
 log() {
   local level="$1"

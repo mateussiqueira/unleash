@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.2.0"
+VERSION="1.3.0"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
-for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor; do
+for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor history; do
 	_lib_path="$LIB_DIR/$_lib.sh"
 	if [ -f "$_lib_path" ]; then
 		source "$_lib_path"
@@ -44,6 +44,8 @@ Bypass / suppress / monitor MDM enrollment on macOS.
 
   Monitoring:
     check           Pre-format / pre-upgrade safety report
+    history         Show event log from monitor/heal runs
+    test            Dry-run mode: simulate without changing anything
     monitor         Background daemon (watches MDM every 5 min)
     monitor-install Install monitor as LaunchDaemon (boot persistent)
     monitor-uninstall Remove monitor LaunchDaemon
@@ -76,6 +78,7 @@ ALIASES
 
 OPTIONS
     --verbose       Show debug messages
+    --dry-run       Simulate without making changes
     --log-file <f>  Write logs to file (appended)
 
 Run without arguments for interactive menu.
@@ -283,14 +286,53 @@ cmd_check() {
 }
 
 cmd_monitor() {
-  case "${2:-}" in
+  local webhook=""
+  local args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      install|uninstall) args+=("$1"); shift ;;
+      --webhook) webhook="$2"; shift 2 ;;
+      *) args+=("$1"); shift ;;
+    esac
+  done
+  set -- "${args[@]}"
+  if [ -n "$webhook" ]; then
+    DISCORD_WEBHOOK="$webhook"
+  fi
+  case "${1:-}" in
     install)   install_monitor_launchdaemon "" ;;
     uninstall) uninstall_monitor_launchdaemon "" ;;
     *)         monitor_mdm ;;
   esac
 }
+
 cmd_monitor_stop() { stop_monitor; }
 cmd_monitor_status() { monitor_status; }
+cmd_history() { show_history; }
+cmd_history_clear() { clear_history; }
+cmd_test() {
+  header "Dry Run Mode"
+  DRY_RUN=true
+  local cmd="${2:-suppress}"
+  case "$cmd" in
+    bypass)    info "Simulating: bypass";   cmd_bypass ;;
+    suppress)  info "Simulating: suppress"; cmd_suppress ;;
+    heal)      info "Simulating: heal";     cmd_heal ;;
+    harden)    info "Simulating: harden";   cmd_harden ;;
+    firewall)  info "Simulating: firewall"; cmd_firewall ;;
+    whitelist) info "Simulating: whitelist"; cmd_whitelist ;;
+    all)
+      info "Simulating all available operations..."
+      info ""
+      DRY_RUN=true suppress_enrollment "/"
+      info ""
+      DRY_RUN=true full_bypass_mode "/"
+      info ""
+      info "Dry-run complete. No changes were made."
+      ;;
+    *) info "Usage: ./unleash test {bypass|suppress|heal|harden|firewall|whitelist|all}" ;;
+  esac
+}
 
 cmd_interactive_recovery() {
 	header "unleash"
@@ -413,6 +455,7 @@ parse_global_opts() {
 	while [ $# -gt 0 ]; do
 		case "$1" in
 			--verbose) VERBOSE=true; shift ;;
+			--dry-run) DRY_RUN=true; shift ;;
 			--log-file) LOG_FILE="$2"; shift 2 ;;
 			*) args+=("$1"); shift ;;
 		esac
@@ -440,6 +483,9 @@ main() {
 		dualboot)         cmd_dualboot ;;
 		status|st|ls)     cmd_status ;;
 		check)            cmd_check ;;
+		history)          cmd_history ;;
+		history-clear)    cmd_history_clear ;;
+		test|dry-run)     cmd_test "$@" ;;
 		monitor|mn)           cmd_monitor "$@" ;;
 		monitor-install|mn-install) install_monitor_launchdaemon "" ;;
 		monitor-uninstall|mn-uninstall) uninstall_monitor_launchdaemon "" ;;

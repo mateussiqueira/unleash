@@ -11,7 +11,7 @@ set -euo pipefail
 VERSION="$VERSION"
 HEADER
 
-for lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor; do
+for lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor history; do
   tail -n +1 "$SCRIPT_DIR/lib/$lib.sh" >> "$OUT"
   echo "" >> "$OUT"
 done

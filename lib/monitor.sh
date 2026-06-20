@@ -80,6 +80,7 @@ monitor_mdm() {
 
   local logfile="/var/log/unleash-monitor.log"
   local pidfile="/tmp/unleash-monitor.pid"
+  local webhook="${DISCORD_WEBHOOK:-}"
 
   if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
     echo -e "${YEL}Monitor already running (PID $(cat "$pidfile"))${NC}"
@@ -135,6 +136,11 @@ monitor_mdm() {
         if command -v osascript &>/dev/null; then
           osascript -e "display notification \"$reason\" with title \"Unleash MDM Alert\" subtitle \"MDM enrollment detected\"" 2>/dev/null || true
         fi
+        if [ -n "$webhook" ]; then
+          local payload
+          payload=$(printf '{"content":"🚨 **Unleash Alert** — MDM enrollment detected: %s","username":"Unleash Monitor"}' "$reason")
+          curl -s -H "Content-Type: application/json" -d "$payload" "$webhook" 2>/dev/null || warn "Webhook failed"
+        fi
         heal_suppress ""
       fi
     fi
@@ -149,6 +155,11 @@ monitor_mdm() {
       echo "$(date) CRITICAL: 12 consecutive dirty checks" >> "$logfile"
       if command -v osascript &>/dev/null; then
         osascript -e "display dialog \"MDM keeps coming back after 12 attempts. Something is persistently re-enrolling.\" with title \"Unleash\" buttons {\"OK\"} default button \"OK\"" 2>/dev/null || true
+      fi
+      if [ -n "$webhook" ]; then
+        curl -s -H "Content-Type: application/json" \
+          -d '{"content":"🚨 **Unleash CRITICAL** — 12 consecutive MDM detections. Persistent re-enrollment detected.","username":"Unleash Monitor"}' \
+          "$webhook" 2>/dev/null || true
       fi
       consecutive_failures=0
     fi

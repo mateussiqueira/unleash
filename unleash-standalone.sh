@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-VERSION="1.2.0"
+VERSION="1.3.0"
 RED='\033[1;31m'
 GRN='\033[1;32m'
 BLU='\033[1;34m'
@@ -11,6 +11,7 @@ NC='\033[0m'
 
 LOG_FILE=""
 VERBOSE=false
+DRY_RUN=false
 
 log() {
   local level="$1"
@@ -331,6 +332,16 @@ PB=/usr/libexec/PlistBuddy
 
 suppress_enrollment() {
 	local data_mount="$1"
+
+	if [ "$DRY_RUN" = true ]; then
+		info "[DRY RUN] Would suppress MDM enrollment on $data_mount"
+		info "[DRY RUN]   - Clear DEP markers in ConfigurationProfiles/Settings"
+		info "[DRY RUN]   - Block 13+ Apple MDM domains in /etc/hosts"
+		info "[DRY RUN]   - Disable 4 enrollment daemons in launchd disabled.plist"
+		info "[DRY RUN]   - Clean MDM artifacts from /Users/*/Library"
+		return 0
+	fi
+
 	local hosts="$data_mount/private/etc/hosts"
 	local cfg="$data_mount/private/var/db/ConfigurationProfiles/Settings"
 	local ldp="$data_mount/private/var/db/com.apple.xpc.launchd/disabled.plist"
@@ -352,7 +363,6 @@ suppress_enrollment() {
 
 	step "Blocking enrollment domains (Data volume hosts)..."
 	[ -f "$hosts" ] || { mkdir -p "$(dirname "$hosts")"; touch "$hosts"; }
-
 	grep -q "Added by unleash" "$hosts" 2>/dev/null || {
 		echo "" >>"$hosts"
 		echo "# Added by unleash — DEP enrollment block" >>"$hosts"
@@ -450,6 +460,15 @@ suppress_only_mode() {
 
 full_bypass_mode() {
 	local data_mount="$1"
+
+	if [ "$DRY_RUN" = true ]; then
+		info "[DRY RUN] Would perform full MDM bypass on $data_mount"
+		info "[DRY RUN]   - Create admin user"
+		info "[DRY RUN]   - Skip Setup Assistant (.AppleSetupDone)"
+		info "[DRY RUN]   - Then run suppress_enrollment"
+		return 0
+	fi
+
 	local node
 	node=$(dscl_node "$data_mount")
 
@@ -1403,6 +1422,7 @@ monitor_mdm() {
 
   local logfile="/var/log/unleash-monitor.log"
   local pidfile="/tmp/unleash-monitor.pid"
+  local webhook="${DISCORD_WEBHOOK:-}"
 
   if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
     echo -e "${YEL}Monitor already running (PID $(cat "$pidfile"))${NC}"
@@ -1458,6 +1478,11 @@ monitor_mdm() {
         if command -v osascript &>/dev/null; then
           osascript -e "display notification \"$reason\" with title \"Unleash MDM Alert\" subtitle \"MDM enrollment detected\"" 2>/dev/null || true
         fi
+        if [ -n "$webhook" ]; then
+          local payload
+          payload=$(printf '{"content":"🚨 **Unleash Alert** — MDM enrollment detected: %s","username":"Unleash Monitor"}' "$reason")
+          curl -s -H "Content-Type: application/json" -d "$payload" "$webhook" 2>/dev/null || warn "Webhook failed"
+        fi
         heal_suppress ""
       fi
     fi
@@ -1472,6 +1497,11 @@ monitor_mdm() {
       echo "$(date) CRITICAL: 12 consecutive dirty checks" >> "$logfile"
       if command -v osascript &>/dev/null; then
         osascript -e "display dialog \"MDM keeps coming back after 12 attempts. Something is persistently re-enrolling.\" with title \"Unleash\" buttons {\"OK\"} default button \"OK\"" 2>/dev/null || true
+      fi
+      if [ -n "$webhook" ]; then
+        curl -s -H "Content-Type: application/json" \
+          -d '{"content":"🚨 **Unleash CRITICAL** — 12 consecutive MDM detections. Persistent re-enrollment detected.","username":"Unleash Monitor"}' \
+          "$webhook" 2>/dev/null || true
       fi
       consecutive_failures=0
     fi
@@ -1508,6 +1538,51 @@ monitor_status() {
   fi
 }
 
+show_history() {
+  header "Unleash Event History"
+
+  local logs=("/var/log/unleash-monitor.log" "/var/log/unleash-heal.log" "/var/log/unleash-monitor.err")
+  local found=false
+
+  for logfile in "${logs[@]}"; do
+    if [ -f "$logfile" ] && [ -s "$logfile" ]; then
+      found=true
+      local name
+      name=$(basename "$logfile")
+      step "$name"
+      while IFS= read -r line; do
+        echo "  $line"
+      done < "$logfile"
+      echo ""
+    fi
+  done
+
+  if [ "$found" = false ]; then
+    info "No event logs found."
+    info "Run 'sudo ./unleash monitor' or 'sudo ./unleash persist' first."
+  fi
+
+  step "Backup records"
+  local backup_dir=".unleash-backup"
+  if [ -d "$backup_dir" ] && [ -f "$backup_dir/timestamp" ]; then
+    local ts
+    ts=$(cat "$backup_dir/timestamp")
+    echo "  Last backup: $ts"
+  else
+    echo "  No backup found"
+  fi
+}
+
+clear_history() {
+  local logs=("/var/log/unleash-monitor.log" "/var/log/unleash-heal.log" "/var/log/unleash-monitor.err")
+  for logfile in "${logs[@]}"; do
+    if [ -f "$logfile" ]; then
+      : > "$logfile"
+      success "Cleared: $logfile"
+    fi
+  done
+}
+
 
 show_help() {
 	cat <<'HELP'
@@ -1537,6 +1612,8 @@ Bypass / suppress / monitor MDM enrollment on macOS.
 
   Monitoring:
     check           Pre-format / pre-upgrade safety report
+    history         Show event log from monitor/heal runs
+    test            Dry-run mode: simulate without changing anything
     monitor         Background daemon (watches MDM every 5 min)
     monitor-install Install monitor as LaunchDaemon (boot persistent)
     monitor-uninstall Remove monitor LaunchDaemon
@@ -1569,6 +1646,7 @@ ALIASES
 
 OPTIONS
     --verbose       Show debug messages
+    --dry-run       Simulate without making changes
     --log-file <f>  Write logs to file (appended)
 
 Run without arguments for interactive menu.
@@ -1776,14 +1854,53 @@ cmd_check() {
 }
 
 cmd_monitor() {
-  case "${2:-}" in
+  local webhook=""
+  local args=()
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      install|uninstall) args+=("$1"); shift ;;
+      --webhook) webhook="$2"; shift 2 ;;
+      *) args+=("$1"); shift ;;
+    esac
+  done
+  set -- "${args[@]}"
+  if [ -n "$webhook" ]; then
+    DISCORD_WEBHOOK="$webhook"
+  fi
+  case "${1:-}" in
     install)   install_monitor_launchdaemon "" ;;
     uninstall) uninstall_monitor_launchdaemon "" ;;
     *)         monitor_mdm ;;
   esac
 }
+
 cmd_monitor_stop() { stop_monitor; }
 cmd_monitor_status() { monitor_status; }
+cmd_history() { show_history; }
+cmd_history_clear() { clear_history; }
+cmd_test() {
+  header "Dry Run Mode"
+  DRY_RUN=true
+  local cmd="${2:-suppress}"
+  case "$cmd" in
+    bypass)    info "Simulating: bypass";   cmd_bypass ;;
+    suppress)  info "Simulating: suppress"; cmd_suppress ;;
+    heal)      info "Simulating: heal";     cmd_heal ;;
+    harden)    info "Simulating: harden";   cmd_harden ;;
+    firewall)  info "Simulating: firewall"; cmd_firewall ;;
+    whitelist) info "Simulating: whitelist"; cmd_whitelist ;;
+    all)
+      info "Simulating all available operations..."
+      info ""
+      DRY_RUN=true suppress_enrollment "/"
+      info ""
+      DRY_RUN=true full_bypass_mode "/"
+      info ""
+      info "Dry-run complete. No changes were made."
+      ;;
+    *) info "Usage: ./unleash test {bypass|suppress|heal|harden|firewall|whitelist|all}" ;;
+  esac
+}
 
 cmd_interactive_recovery() {
 	header "unleash"
@@ -1906,6 +2023,7 @@ parse_global_opts() {
 	while [ $# -gt 0 ]; do
 		case "$1" in
 			--verbose) VERBOSE=true; shift ;;
+			--dry-run) DRY_RUN=true; shift ;;
 			--log-file) LOG_FILE="$2"; shift 2 ;;
 			*) args+=("$1"); shift ;;
 		esac
@@ -1933,6 +2051,9 @@ main() {
 		dualboot)         cmd_dualboot ;;
 		status|st|ls)     cmd_status ;;
 		check)            cmd_check ;;
+		history)          cmd_history ;;
+		history-clear)    cmd_history_clear ;;
+		test|dry-run)     cmd_test "$@" ;;
 		monitor|mn)           cmd_monitor "$@" ;;
 		monitor-install|mn-install) install_monitor_launchdaemon "" ;;
 		monitor-uninstall|mn-uninstall) uninstall_monitor_launchdaemon "" ;;

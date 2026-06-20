@@ -4,6 +4,16 @@ PB=/usr/libexec/PlistBuddy
 
 suppress_enrollment() {
 	local data_mount="$1"
+
+	if [ "$DRY_RUN" = true ]; then
+		info "[DRY RUN] Would suppress MDM enrollment on $data_mount"
+		info "[DRY RUN]   - Clear DEP markers in ConfigurationProfiles/Settings"
+		info "[DRY RUN]   - Block 13+ Apple MDM domains in /etc/hosts"
+		info "[DRY RUN]   - Disable 4 enrollment daemons in launchd disabled.plist"
+		info "[DRY RUN]   - Clean MDM artifacts from /Users/*/Library"
+		return 0
+	fi
+
 	local hosts="$data_mount/private/etc/hosts"
 	local cfg="$data_mount/private/var/db/ConfigurationProfiles/Settings"
 	local ldp="$data_mount/private/var/db/com.apple.xpc.launchd/disabled.plist"
@@ -25,7 +35,6 @@ suppress_enrollment() {
 
 	step "Blocking enrollment domains (Data volume hosts)..."
 	[ -f "$hosts" ] || { mkdir -p "$(dirname "$hosts")"; touch "$hosts"; }
-
 	grep -q "Added by unleash" "$hosts" 2>/dev/null || {
 		echo "" >>"$hosts"
 		echo "# Added by unleash — DEP enrollment block" >>"$hosts"
@@ -123,6 +132,15 @@ suppress_only_mode() {
 
 full_bypass_mode() {
 	local data_mount="$1"
+
+	if [ "$DRY_RUN" = true ]; then
+		info "[DRY RUN] Would perform full MDM bypass on $data_mount"
+		info "[DRY RUN]   - Create admin user"
+		info "[DRY RUN]   - Skip Setup Assistant (.AppleSetupDone)"
+		info "[DRY RUN]   - Then run suppress_enrollment"
+		return 0
+	fi
+
 	local node
 	node=$(dscl_node "$data_mount")
 
