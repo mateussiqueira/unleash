@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="docs/icon.svg" width="120" alt="unleash logo">
+</p>
+
 # unleash
 
 Single-script MDM bypass for macOS. Works from Recovery mode on Apple Silicon and Intel.

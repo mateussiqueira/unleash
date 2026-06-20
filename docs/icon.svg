@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#89b4fa"/>
+      <stop offset="100%" stop-color="#b4befe"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="512" height="512" fill="#1e1e2e" rx="80"/>
+
+  <!-- Shield -->
+  <path d="M256 80 L400 150 L400 280 Q400 370 256 440 Q112 370 112 280 L112 150 Z"
+        fill="none" stroke="url(#g)" stroke-width="24" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Broken chain across shield -->
+  <!-- Left half -->
+  <path d="M180 220 Q160 190 180 160 Q200 130 230 140"
+        fill="none" stroke="#f38ba8" stroke-width="18" stroke-linecap="round"/>
+  <!-- Right half -->
+  <path d="M332 292 Q352 322 332 352 Q312 382 282 372"
+        fill="none" stroke="#f38ba8" stroke-width="18" stroke-linecap="round"/>
+  <!-- Break -->
+  <path d="M230 140 L200 180" fill="none" stroke="#1e1e2e" stroke-width="24" stroke-linecap="round"/>
+  <path d="M282 372 L312 332" fill="none" stroke="#1e1e2e" stroke-width="24" stroke-linecap="round"/>
+
+  <!-- Checkmark -->
+  <path d="M220 280 L248 310 L296 248"
+        fill="none" stroke="#a6e3a1" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Text -->
+  <text x="256" y="492" fill="#6c7086" font-family="SFMono-Regular,Consolas,monospace" font-size="28" text-anchor="middle" font-weight="bold" letter-spacing="4">UNLEASH</text>
+</svg>
