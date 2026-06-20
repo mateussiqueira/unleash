@@ -10,13 +10,23 @@
   <a href="#install">Install</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="#commands">Commands</a> ·
-  <a href="#how-it-works">How It Works</a> ·
+  <a href="guide">Architecture Guide</a> ·
+  <a href="faq">FAQ</a> ·
   <a href="#troubleshooting">Troubleshooting</a>
 </p>
 
 ---
 
 unleash replaces the original five bypass-mdm scripts with a single file that handles every layer of Apple's MDM enrollment: DEP markers, network blocking, daemon overrides, user-level artifacts, and kernel-level firewall. Works from Recovery mode on Apple Silicon and Intel.
+
+**What makes unleash different from other bypass tools:**
+
+- **Covers all 5 layers** — not just DEP markers or hosts file. Kills every path MDM uses to re-enroll.
+- **User-level artifact cleanup** — Migration Assistant copies MDM caches per user. Unleash cleans every home directory.
+- **Kernel-level pf firewall** — `/etc/hosts` is bypassed by DNS-over-HTTPS. pf is not.
+- **Auto-heal daemon** — survives macOS updates. `persist` + `heal` catches whatever the update resets.
+- **39 commands** — bypass, suppress, monitor, harden, audit, backup, predict, remediate, and more.
+- **macOS 12–27** — tested on Intel T2, M1, M2, M3, M4, M5.
 
 ---
 
@@ -72,6 +82,14 @@ Or to check your current status:
 ```bash
 sudo ./unleash status -d
 ```
+
+### One-command setup (new Mac)
+
+```bash
+sudo ./unleash init
+```
+
+Interactive wizard that runs the full setup: firewall, monitor, persist, backup, and audit.
 
 ---
 
@@ -129,7 +147,7 @@ sudo ./unleash status -d
 
 | Command | Description |
 |---------|-------------|
-| `update` | Self-update from the latest GitHub release |
+| `update` | Self-update from the latest GitHub release (GPG-verified) |
 | `uninstall` | Complete removal with safety prompts |
 | `reinstall` | Uninstall + install (atomic update) |
 | `config` | View or edit persistent settings in `~/.unleash.conf` |
@@ -138,30 +156,108 @@ sudo ./unleash status -d
 | `demo` | Simulated bypass flow — no real changes |
 | `test` | Dry-run simulation of any command |
 | `dualboot` | Target an external or dual-boot volume |
-| `init` | Interactive setup wizard |
+
+### Smart commands (v2.0)
+
+| Command | Description |
+|---------|-------------|
+| `init` | Interactive setup wizard — firewall, monitor, persist, backup |
 | `suggest` | Risk-based system analysis and recommendations |
-| `remediate` | Per-org MDM cleanup (JAMF, Mosyle, Kandji) |
-| `predict` | Serial number lookup — predict org enrollment |
+| `remediate` | Per-org MDM cleanup (JAMF, Mosyle, Addigy, Kandji, VMware) |
+| `predict` | Serial number lookup — predict which org enrolled this Mac |
 | `telemetry` | Manage anonymous usage stats (opt-in) |
 | `discord-bot` | Start Discord DM alert bot |
+| `discord-bot-stop` | Stop the Discord bot |
+| `discord-bot-status` | Check if the Discord bot is running |
 
 ### Aliases
 
 Every command has a short alias:
 
 ```
-by   = bypass       fw  = firewall     fw-off = firewall-off
-sv   = suppress     mn  = monitor       doc   = doctor
-st   = status       up  = update        uni   = uninstall
-rei  = reinstall    vk  = vpn-kill      vkr   = vpn-kill-remove
-vks  = vpn-kill-status
+by  = bypass       fw  = firewall      fw-off = firewall-off
+sv  = suppress     mn  = monitor       doc   = doctor
+st  = status       up  = update        uni   = uninstall
+rei = reinstall    vk  = vpn-kill      vkr   = vpn-kill-remove
+vks = vpn-kill-status                  wl    = whitelist
+it  = init         su  = suggest       rm   = remediate
+pr  = predict      tel = telemetry     db   = discord-bot
+dbs = discord-bot-stop                 dbs2 = discord-bot-status
 ```
+
+### Global options
+
+| Option | Effect |
+|--------|--------|
+| `--verbose` | Show debug messages |
+| `--log-file <path>` | Write log output to a file |
+
+---
+
+## Scenarios
+
+### Before buying a used Mac
+
+```bash
+./unleash predict ABC12345678    # check serial against known org prefixes
+./unleash check                  # is this Mac safe to wipe?
+```
+
+`predict` looks up the device serial against known MDM org prefixes. If it matches JAMF, Mosyle, or another org, you know what you're dealing with before you buy.
+
+### Recovery after Migration Assistant
+
+1. Fresh install macOS on a new Mac
+2. Migration Assistant copies your old data
+3. MDM appears within minutes of login
+
+**Fix**: Boot to Recovery and run `unleash suppress` (or `bypass` if you need a new admin user). This removes the DEP markers, user-level artifacts, and MDM preferences that MA transferred over.
+
+### macOS update brought MDM back
+
+1. System update restores enrollment daemons automatically
+2. MDM block in `/etc/hosts` is often preserved
+
+**Fix**: `sudo ./unleash heal` — re-disables daemons and re-checks all layers. If you ran `persist` before the update, this happens automatically on the next boot.
+
+### Buying a former office Mac
+
+1. The serial might still be in the company's ABM
+2. Even after a clean wipe, connecting to Wi-Fi at Setup Assistant triggers enrollment
+
+**Strategy**:
+- Boot to Recovery without connecting to Wi-Fi
+- Run `unleash bypass` before the device ever phones home
+- Run `unleash persist` and `unleash whitelist` so it stays clean
+- The serial stays in ABM forever — but as long as the device never connects with full protections removed, it will not re-enroll
+
+### Used Mac that already has a user logged in
+
+```bash
+sudo ./unleash audit     # check current state
+sudo ./unleash harden    # kill MDM processes immediately
+sudo ./unleash whitelist # block MDM while keeping iCloud
+sudo ./unleash persist   # survive future updates
+```
+
+### Setting up a new Mac before first boot
+
+1. Boot to Recovery without Wi-Fi
+2. Run `unleash init` — interactive wizard
+3. It will: suppress MDM, install persist, install whitelist, run audit
+4. Reboot, set up normally, MDM never bothers you
 
 ---
 
 ## How It Works
 
-MDM (Mobile Device Management) operates in four layers on macOS. Unleash blocks every layer:
+MDM (Mobile Device Management) operates in five layers on macOS. Unleash blocks every layer:
+
+**Layer 1: DEP enrollment markers** → `/etc/hosts` block → **Layer 2: Network blocking**
+
+**Layer 3: Daemon overrides** → launchd disabled → **Layer 4: User-level artifacts**
+
+**Layer 5: pf firewall** → kernel-level, DoH-proof
 
 ### Layer 1: DEP enrollment markers
 
@@ -174,26 +270,97 @@ In `/var/db/ConfigurationProfiles/Settings/`, Apple stores `.cloudConfig*` files
 The MDM enrollment process phones home to Apple's servers. Blocking these domains prevents the device from checking in.
 
 **What unleash does**:
-- **`/etc/hosts`** (basic): Blocks 13+ Apple MDM domains including `deviceenrollment.apple.com`, `mdmenrollment.apple.com`, `iprofiles.apple.com`. Can be bypassed by DNS-over-HTTPS.
-- **pf firewall** (advanced): Kernel-level packet filtering that blocks MDM IP ranges even when DoH is used. Installed via `firewall` command.
+- **`/etc/hosts`** (basic): Blocks 13+ Apple MDM domains including `deviceenrollment.apple.com`, `mdmenrollment.apple.com`, `iprofiles.apple.com`. Both IPv4 (0.0.0.0) and IPv6 (::) entries.
+- **pf firewall** (advanced): Kernel-level packet filtering that blocks MDM IP ranges even when DoH is used.
+
+Blocked domains:
+
+| Domain | Service |
+|--------|---------|
+| `iprofiles.apple.com` | Profile delivery |
+| `deviceenrollment.apple.com` | DEP service |
+| `mdmenrollment.apple.com` | MDM enrollment |
+| `acmdm.apple.com` | Apple Configurator 2 MDM |
+| `axm-adm-mdm.apple.com` | ACM enrollment |
+| `albert.apple.com` | ABM device assignment |
+| `gdmf.apple.com` | MDM framework |
+| `configuration.apple.com` | Configuration service |
+| `xp.apple.com` | Device management |
+| `gs.apple.com` | GSM enrollment |
+| `tb.apple.com` | Device trust |
+| `vpp.itunes.apple.com` | Volume purchase program |
+
+Plus your org's specific MDM host, extracted from the DEP record.
 
 ### Layer 3: Daemon overrides
 
-macOS ships with enrollment daemons (`ManagedClient.enroll`, `activationd`) that trigger enrollment on boot. Disabling these prevents automatic MDM checks.
+macOS ships with enrollment daemons that trigger enrollment on boot:
 
-**What unleash does**: Creates `launchd` disabled plists for 4 enrollment-related daemons, preventing them from starting.
+| Daemon | Purpose |
+|--------|---------|
+| `com.apple.ManagedClient.enroll` | Main enrollment |
+| `com.apple.ManagedClient.cloudConfiguration` | Cloud configuration |
+| `com.apple.mdmclient.daemon.runatboot` | MDM client |
+| `com.apple.activationd` | Device activation |
+
+**What unleash does**: Creates launchd disabled overrides for all four, preventing them from starting. Also disables Spotlight shortcut for Remote Management.
 
 ### Layer 4: User-level artifacts
 
-Migration Assistant and user login caches leave MDM enrollment data in `/Users/*/Library/Preferences/` and `/Users/*/Library/Caches/`. This is the #1 reason MDM comes back after a successful bypass.
+Migration Assistant and login caches leave MDM enrollment data in home directories:
 
-**What unleash does**: Scans every user's Library directory and removes `com.apple.mdm.plist`, `com.apple.mdmclient.plist`, and `com.apple.enrollmenttool` cache.
+```
+~/Library/Preferences/com.apple.mdm.*
+~/Library/Preferences/com.apple.ManagedClient.*
+~/Library/Application Support/com.apple.ManagedClient*/
+~/Library/LaunchAgents/com.apple.mdm.*
+```
+
+**What unleash does**: Scans every user's Library directory and removes all MDM-related preferences, caches, and launch agents. This is the step most other tools miss.
+
+### Layer 5: pf firewall (optional, advanced)
+
+`/etc/hosts` can be bypassed by DNS-over-HTTPS (DoH). The pf packet filter operates at the kernel level — DoH cannot bypass it.
+
+**`firewall` command**: Blocks Apple's entire IP range (`17.0.0.0/8` + `17.128.0.0/10`). 100% effective but breaks iCloud, App Store, and system updates.
+
+**`whitelist` command**: Resolves only the essential MDM domains to IPs and blocks those specifically. Keeps iCloud and App Store working.
+
+---
+
+## Intel vs Apple Silicon
+
+| | Intel T2 | Apple Silicon |
+|---|---|---|
+| Recovery | Cmd+R at boot | Hold power button |
+| System volume | Writable with SIP disabled | Read-only (SSV) |
+| FileVault unlock | `diskutil apfs unlockVolume` | Same, needs user password or recovery key |
+| Enrollment daemons | Fewer | `activationd` + `cloudConfiguration` |
+| NVRAM flags | Some | More firmware-level flags |
+| Migration Assistant | Less risky | **Carries MDM state** — always clean after |
+
+On Apple Silicon, all writes target the Data volume. The system volume is never modified. SIP does not need to be disabled.
+
+---
+
+## macOS Version Support
+
+| Version | Codename | Status |
+|---------|----------|--------|
+| 12.x | Monterey | ✓ Tested |
+| 13.x | Ventura | ✓ Tested |
+| 14.x | Sonoma | ✓ Tested |
+| 15.x | Sequoia | ✓ Tested |
+| 26.x | Tahoe | ✓ Tested |
+| 27.x | (current) | ✓ Tested |
+
+Should work on any version that uses the same MDM enrollment mechanism — which has been unchanged since Monterey. If a future macOS changes `ManagedClient.enroll`, activationd, or the DEP markers, open an issue.
 
 ---
 
 ## Troubleshooting
 
-### MDM returns after reboot
+### MDM comes back after reboot
 
 The most likely cause is user-level artifacts. Run from Recovery:
 ```bash
@@ -226,10 +393,6 @@ Unleash will detect FileVault and prompt for the recovery key or volume password
 
 Run `sudo ./unleash heal` after any macOS update. If you used `persist` before the update, it does this automatically on next boot.
 
-### Monitor won't start
-
-Check if it's already running (`monitor-status`), check permissions (needs root), and check logs at `/var/log/unleash-monitor.log`.
-
 ### Can I use iCloud after bypass?
 
 Yes, but:
@@ -237,31 +400,46 @@ Yes, but:
 - Use the `whitelist` command instead of `firewall` to block only MDM domains and leave iCloud/App Store working
 - Or manually remove those two lines from `/etc/hosts`
 
----
+### DFU / IPSW restore (hard lock)
 
-## Smart Features
+If MDM is unbreakable even from Recovery, the device may need a full firmware restore. This applies to Apple Silicon only.
 
-### `suggest` — Risk-Based Recommendations
+You need a second Mac with Apple Configurator 2 (free), a USB-C cable, and the IPSW file for your Mac model.
 
-Reads your system state (DEP markers, hosts file, pf firewall, user artifacts, Configurator enrollment) and gives a risk score plus specific commands to run.
+1. Open Apple Configurator 2 on the helper Mac
+2. Connect the locked Mac via USB-C while holding power
+3. In Configurator: right-click the DFU device → Advanced → Restore
+4. Pick the IPSW file, wait 10–30 minutes
+5. After restore, boot to Recovery without Wi-Fi and run `unleash bypass`
 
-### `remediate` — Per-Org Cleanup
-
-Some MDM vendors (JAMF, Mosyle, Addigy, Kandji, VMware) leave vendor-specific artifacts. `remediate` auto-detects the org and applies targeted cleanup — including extra DNS blocks for their management domains.
-
-### `predict` — Serial Number Lookup
-
-Enter a serial number and unleash checks known org prefixes to predict whether a Mac was enrolled by a specific organization. Useful for buying used Macs.
-
-### `init` — Setup Wizard
-
-Walks you through first-time setup: Migration Assistant scan, Configurator check, firewall enable, monitor install, persist install, and system backup. One command to go from zero to protected.
+**This erases all data.** IPSW files at [ipsw.me](https://ipsw.me).
 
 ---
 
-## Terminal Demo
+## Logging
 
-<img src="demo.svg" alt="unleash terminal demo" width="720">
+All commands log with timestamps and levels:
+
+```
+[INF] Data volume: /Volumes/Macintosh HD - Data
+[ OK] Admin 'apple' created (UID 501)
+[WRN] DEP activation record present
+[ERR] Firewall needs sudo: sudo ./unleash firewall
+[STP] Locating Data volume by APFS role...
+[DBG] Checking pfctl availability
+```
+
+Use `--verbose` for debug messages and `--log-file <path>` to write everything to a file.
+
+---
+
+## Safety
+
+- **No SSV writes** — all changes target the Data volume
+- **Reversible** — `backup` saves state, `restore` reverts
+- **No data erasure** — never runs `profiles renew` or erase commands
+- **Idempotent** — running multiple times is harmless
+- **Prompts for confirmation** before destructive actions
 
 ---
 
@@ -269,6 +447,8 @@ Walks you through first-time setup: Migration Assistant scan, Configurator check
 
 - [GitHub Repository](https://github.com/mateussiqueira/unleash)
 - [Full README](https://github.com/mateussiqueira/unleash/blob/main/README.md)
+- [Architecture Guide](guide)
+- [FAQ](faq)
 - [Quick Reference (QUICKSTART.md)](https://github.com/mateussiqueira/unleash/blob/main/QUICKSTART.md)
 - [Changelog](https://github.com/mateussiqueira/unleash/blob/main/CHANGELOG.md)
 - [Contributing](https://github.com/mateussiqueira/unleash/blob/main/CONTRIBUTING.md)

@@ -1,6 +1,20 @@
 title: unleash
-description: Single-script MDM bypass for macOS
+description: Single-script MDM bypass for macOS — covers all 5 layers of Apple MDM enrollment
 url: "https://mateussiqueira.github.io"
 baseurl: "/unleash"
 theme: jekyll-theme-cayman
 markdown: GFM
+plugins:
+  - jekyll-relative-links
+relative_links:
+  enabled: true
+  collections: false
+defaults:
+  - scope:
+      path: ""
+    values:
+      layout: "default"
+header_pages:
+  - index.md
+  - guide.md
+  - faq.md
