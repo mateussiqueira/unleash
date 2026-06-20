@@ -81,6 +81,19 @@ begin() {
   echo -ne "${CYAN}  ${label} ... ${NC}"
 }
 
+spinner() {
+  local pid=$1
+  local msg="${2:-Working}"
+  local spin='-\|/'
+  local i=0
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$(( (i+1) % 4 ))
+    echo -ne "\r${CYAN}  ${msg} ... ${spin:$i:1}${NC}"
+    sleep 0.2
+  done
+  echo -ne "\r${CYAN}  ${msg} ... ${NC}"
+}
+
 end_ok() {
   echo -e "${GRN}✓${NC}"
 }

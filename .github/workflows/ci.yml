@@ -32,6 +32,12 @@ jobs:
             lib/check.sh
             lib/monitor.sh
             lib/history.sh
+            lib/doctor.sh
+            lib/selfupdate.sh
+            lib/uninstall.sh
+            lib/config.sh
+            lib/report.sh
+            lib/ma_detect.sh
 
   syntax:
     name: Bash Syntax Check

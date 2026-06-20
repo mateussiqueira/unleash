@@ -1,6 +1,6 @@
 #!/bin/bash
 set -euo pipefail
-VERSION="1.3.0"
+VERSION="1.4.0"
 RED='\033[1;31m'
 GRN='\033[1;32m'
 BLU='\033[1;34m'
@@ -84,6 +84,19 @@ begin() {
   echo -ne "${CYAN}  ${label} ... ${NC}"
 }
 
+spinner() {
+  local pid=$1
+  local msg="${2:-Working}"
+  local spin='-\|/'
+  local i=0
+  while kill -0 "$pid" 2>/dev/null; do
+    i=$(( (i+1) % 4 ))
+    echo -ne "\r${CYAN}  ${msg} ... ${spin:$i:1}${NC}"
+    sleep 0.2
+  done
+  echo -ne "\r${CYAN}  ${msg} ... ${NC}"
+}
+
 end_ok() {
   echo -e "${GRN}✓${NC}"
 }
@@ -107,6 +120,74 @@ confirm() {
   local response
   read -p "${prompt} (y/N): " response
   [[ "$response" =~ ^[Yy]$ ]]
+}
+
+CONFIG_FILE="$HOME/.unleash.conf"
+
+load_config() {
+  [ -f "$CONFIG_FILE" ] || return 0
+
+  while IFS='=' read -r key value; do
+    key="${key// /}"
+    value="${value// /}"
+    [ -z "$key" ] && continue
+    case "$key" in
+      WEBHOOK) DISCORD_WEBHOOK="$value" ;;
+      LOG_LEVEL) [ "$value" = "verbose" ] && VERBOSE=true ;;
+      LOG_FILE) LOG_FILE="$value" ;;
+    esac
+  done < "$CONFIG_FILE"
+}
+
+save_config() {
+  local key="$1"
+  local value="$2"
+  local tmp
+
+  [ -f "$CONFIG_FILE" ] || touch "$CONFIG_FILE"
+
+  if grep -q "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
+    sed -i '' "s/^${key}=.*/${key}=${value}/" "$CONFIG_FILE"
+  else
+    echo "${key}=${value}" >> "$CONFIG_FILE"
+  fi
+  success "Saved $key to $CONFIG_FILE"
+}
+
+cmd_config() {
+  header "Configuration"
+
+  case "${2:-show}" in
+    show)
+      if [ ! -f "$CONFIG_FILE" ]; then
+        info "No config file at $CONFIG_FILE"
+        return 0
+      fi
+      step "Current settings ($CONFIG_FILE)"
+      cat "$CONFIG_FILE" | sed 's/^/  /'
+      ;;
+    set)
+      local key="$3"
+      local value="$4"
+      [ -z "$key" ] || [ -z "$value" ] && {
+        info "Usage: ./unleash config set KEY VALUE"
+        info "Keys: WEBHOOK, LOG_LEVEL (verbose), LOG_FILE"
+        return 1
+      }
+      save_config "$key" "$value"
+      ;;
+    unset)
+      local key="$3"
+      [ -z "$key" ] && { info "Usage: ./unleash config unset KEY"; return 1; }
+      if [ -f "$CONFIG_FILE" ]; then
+        sed -i '' "/^${key}=/d" "$CONFIG_FILE"
+        success "Removed $key from config"
+      fi
+      ;;
+    *)
+      info "Usage: ./unleash config {show|set KEY VALUE|unset KEY}"
+      ;;
+  esac
 }
 
 
@@ -1583,6 +1664,463 @@ clear_history() {
   done
 }
 
+run_doctor() {
+  header "Unleash Doctor — Pre-Flight Check"
+
+  local errors=0 warnings=0
+
+  begin "Script location"
+  if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR" ]; then
+    end_ok; echo "     $SCRIPT_DIR"
+  else
+    end_fail; errors=$((errors + 1))
+  fi
+
+  begin "Library files"
+  local missing=0
+  for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor history; do
+    [ -f "$LIB_DIR/$_lib.sh" ] || missing=$((missing + 1))
+  done
+  if [ "$missing" -eq 0 ]; then
+    end_ok; echo "     13/13 modules loaded"
+  else
+    end_fail; echo "     $missing module(s) missing"; errors=$((errors + 1))
+  fi
+
+  begin "Root privileges"
+  if is_root; then
+    end_ok
+  else
+    end_fail; echo "     Run with sudo for full checks"
+    warnings=$((warnings + 1))
+  fi
+
+  begin "Recovery mode"
+  if is_recovery; then
+    end_ok; echo "     Full bypass available"
+  else
+    end_fail; echo "     Limited to booted-system commands"
+    warnings=$((warnings + 1))
+  fi
+
+  begin "Disk space (Data volume)"
+  local mount_pt
+  mount_pt=$(df / 2>/dev/null | awk 'NR>1 {print $NF; exit}')
+  local avail
+  avail=$(df / 2>/dev/null | awk 'NR>1 {print $4; exit}')
+  if [ -n "$avail" ] && [ "$avail" -gt 1048576 ]; then
+    end_ok; echo "     $(echo "$avail" | awk '{printf "%.0f MB", $1/1024}') free"
+  elif [ -n "$avail" ]; then
+    end_fail; echo "     Low disk space"; warnings=$((warnings + 1))
+  else
+    end_fail; echo "     Cannot determine"; errors=$((errors + 1))
+  fi
+
+  begin "Internet access"
+  if command -v curl &>/dev/null && curl -s --max-time 3 https://github.com >/dev/null 2>&1; then
+    end_ok; echo "     Online"
+  else
+    end_fail; echo "     Offline (expected in Recovery)"
+  fi
+
+  begin "pfctl available"
+  if command -v pfctl &>/dev/null; then
+    end_ok
+  else
+    end_fail; echo "     Firewall commands unavailable"
+  fi
+
+  begin "profiles command"
+  if command -v profiles &>/dev/null; then
+    end_ok
+  else
+    end_fail; echo "     Audit/harden commands limited"
+  fi
+
+  begin "launchctl available"
+  if command -v launchctl &>/dev/null; then
+    end_ok
+  else
+    end_fail; echo "     Persistence commands unavailable"
+  fi
+
+  begin "Third-party firewall"
+  local tp_found=""
+  [ -d "/Applications/Little Snitch.app" ] && tp_found="Little Snitch"
+  [ -d "/Applications/LuLu.app" ] && tp_found="${tp_found:+$tp_found, }LuLu"
+  [ -f "/Library/Extensions/LittleSnitch.kext" ] && tp_found="${tp_found:+$tp_found, }Little Snitch (kext)"
+  [ -d "/Applications/Radio Silence.app" ] && tp_found="${tp_found:+$tp_found, }Radio Silence"
+  [ -d "/Applications/Vallum.app" ] && tp_found="${tp_found:+$tp_found, }Vallum"
+  if [ -n "$tp_found" ]; then
+    end_ok; echo "     $tp_found"
+  else
+    end_fail; echo "     None detected"
+  fi
+
+  echo ""
+  step "Persistence status"
+  if [ -f "/Library/LaunchDaemons/com.unleash.heal.plist" ]; then
+    echo "     heal  LaunchDaemon: installed"
+  else
+    echo "     heal  LaunchDaemon: not installed"
+  fi
+  if [ -f "/Library/LaunchDaemons/com.unleash.monitor.plist" ]; then
+    echo "     monitor LaunchDaemon: installed"
+  else
+    echo "     monitor LaunchDaemon: not installed"
+  fi
+  if [ -f "/etc/pf.anchors/com.unleash/mdm" ]; then
+    echo "     pf firewall anchor: installed"
+  else
+    echo "     pf firewall anchor: not installed"
+  fi
+  if [ -f "/etc/pf.anchors/com.unleash.selective" ]; then
+    echo "     pf selective anchor: installed"
+  else
+    echo "     pf selective anchor: not installed"
+  fi
+
+  echo ""
+  echo -e "${CYAN}╔══════════════════════════════════════╗${NC}"
+  if [ "$errors" -eq 0 ] && [ "$warnings" -eq 0 ]; then
+    echo -e "${CYAN}║${NC}  ${GRN}All checks passed${NC}                       ${CYAN}║${NC}"
+  elif [ "$errors" -eq 0 ]; then
+    echo -e "${CYAN}║${NC}  ${YEL}Passed with $warnings warning(s)${NC}               ${CYAN}║${NC}"
+  else
+    echo -e "${CYAN}║${NC}  ${RED}$errors error(s), $warnings warning(s)${NC}              ${CYAN}║${NC}"
+  fi
+  echo -e "${CYAN}╚══════════════════════════════════════╝${NC}"
+}
+
+do_self_update() {
+  header "Unleash Update"
+
+  if ! command -v curl &>/dev/null; then
+    error_exit "curl required for update"
+  fi
+
+  local repo="mateussiqueira/unleash"
+  local api_url="https://api.github.com/repos/${repo}/releases/latest"
+  local tmp_dir
+  tmp_dir=$(mktemp -d)
+  local current_sha
+  current_sha=$(git -C "$SCRIPT_DIR" rev-parse HEAD 2>/dev/null || echo "unknown")
+
+  begin "Checking latest release"
+  local release_data
+  release_data=$(curl -s "$api_url" 2>/dev/null || true)
+  local latest_tag
+  latest_tag=$(echo "$release_data" | grep '"tag_name"' | head -1 | sed -E 's/.*"v?([^"]+)".*/\1/')
+  local latest_sha
+  latest_sha=$(echo "$release_data" | grep '"target_commitish"' | head -1 | sed -E 's/.*"([^"]+)".*/\1/')
+
+  if [ -z "$latest_tag" ]; then
+    end_fail; echo "     No network or invalid response"
+    rm -rf "$tmp_dir"
+    return 1
+  fi
+  end_ok; echo "     Latest: v$latest_tag"
+
+  if [ "v$latest_tag" = "$(echo "v$VERSION")" ]; then
+    success "Already up to date (v$VERSION)"
+    rm -rf "$tmp_dir"
+    return 0
+  fi
+
+  info "Updating from v$VERSION to v$latest_tag..."
+
+  begin "Downloading latest unleash"
+  local dl_url="https://raw.githubusercontent.com/${repo}/main/unleash"
+  local tmp="$tmp_dir/unleash"
+  if curl -sL "$dl_url" -o "$tmp" && [ -s "$tmp" ]; then
+    end_ok
+  else
+    end_fail; error_exit "Download failed"
+  fi
+
+  begin "Verifying syntax"
+  if bash -n "$tmp" 2>/dev/null; then
+    end_ok
+  else
+    end_fail; error_exit "Downloaded script has syntax errors"
+  fi
+
+  local target="${0:-unleash}"
+  if [ ! -w "$target" ]; then
+    info "$target not writable, trying sudo..."
+    cp "$tmp" "$target" 2>/dev/null || sudo cp "$tmp" "$target" 2>/dev/null || {
+      error_exit "Cannot write to $target (run with sudo)"
+    }
+  else
+    cp "$tmp" "$target"
+  fi
+  chmod +x "$target" 2>/dev/null || sudo chmod +x "$target" 2>/dev/null || true
+
+  rm -rf "$tmp_dir"
+  success "Updated to v$latest_tag"
+  info "Run again to use new version"
+}
+
+do_uninstall() {
+  header "Unleash — Full Uninstall"
+
+  if ! is_root; then
+    error_exit "Uninstall needs sudo: sudo ./unleash uninstall"
+  fi
+
+  begin "Removing heal LaunchDaemon"
+  local plist="/Library/LaunchDaemons/com.unleash.heal.plist"
+  if [ -f "$plist" ]; then
+    launchctl unload "$plist" 2>/dev/null || true
+    rm -f "$plist"
+    end_ok
+  else
+    end_fail; echo "     Not installed"
+  fi
+
+  begin "Removing monitor LaunchDaemon"
+  plist="/Library/LaunchDaemons/com.unleash.monitor.plist"
+  if [ -f "$plist" ]; then
+    launchctl unload "$plist" 2>/dev/null || true
+    rm -f "$plist"
+    end_ok
+  else
+    end_fail; echo "     Not installed"
+  fi
+
+  begin "Cleaning pf anchors"
+  local anchors=("/etc/pf.anchors/com.unleash/mdm" "/etc/pf.anchors/com.unleash.selective")
+  for a in "${anchors[@]}"; do
+    [ -f "$a" ] && rm -f "$a"
+  done
+  for anchor_name in "com.unleash/mdm" "com.unleash.selective"; do
+    pfctl -a "$anchor_name" -F all 2>/dev/null || true
+  done
+  local pf_conf="/etc/pf.conf"
+  if [ -f "$pf_conf" ]; then
+    sed -i '' '/# Added by unleash/d' "$pf_conf" 2>/dev/null || true
+    sed -i '' '/com\.unleash/d' "$pf_conf" 2>/dev/null || true
+  fi
+  pfctl -f /etc/pf.conf 2>/dev/null || true
+  end_ok
+
+  begin "Cleaning hosts entries"
+  local hosts="/private/etc/hosts"
+  if [ -f "$hosts" ]; then
+    sed -i '' '/# Added by unleash/d' "$hosts" 2>/dev/null || true
+    local domains=("iprofiles.apple.com" "deviceenrollment.apple.com" "mdmenrollment.apple.com")
+    for d in "${domains[@]}"; do
+      sed -i '' "/[[:space:]]$d/d" "$hosts" 2>/dev/null || true
+      sed -i '' "/::$d/d" "$hosts" 2>/dev/null || true
+    done
+    end_ok
+  else
+    end_fail; echo "     Not found"
+  fi
+
+  begin "Restoring launchd overrides"
+  local ldp="/private/var/db/com.apple.xpc.launchd/disabled.plist"
+  if [ -f "$ldp" ]; then
+    for label in com.apple.ManagedClient.enroll com.apple.ManagedClient.cloudConfiguration \
+      com.apple.mdmclient.daemon.runatboot com.apple.activationd; do
+      /usr/libexec/PlistBuddy -c "Delete :$label" "$ldp" 2>/dev/null || true
+    done
+    end_ok
+  else
+    end_fail; echo "     Not found"
+  fi
+
+  begin "Removing backup directory"
+  local backup=".unleash-backup"
+  if [ -d "$backup" ]; then
+    rm -rf "$backup" 2>/dev/null || true
+    end_ok
+  else
+    end_fail; echo "     Not found"
+  fi
+
+  begin "Removing config file"
+  if [ -f "$HOME/.unleash.conf" ]; then
+    rm -f "$HOME/.unleash.conf"
+    end_ok
+  else
+    end_fail; echo "     Not found"
+  fi
+
+  begin "Stopping monitor if running"
+  local pidfile="/tmp/unleash-monitor.pid"
+  if [ -f "$pidfile" ]; then
+    kill "$(cat "$pidfile")" 2>/dev/null || true
+    rm -f "$pidfile"
+    end_ok
+  else
+    end_fail; echo "     Not running"
+  fi
+
+  echo ""
+  success "Uninstall complete"
+  info "Your system is back to its original state."
+  info "The unleash script itself was not removed."
+}
+
+generate_report() {
+  header "Unleash System Report"
+
+  local ts
+  ts=$(date '+%Y-%m-%d %H:%M:%S')
+  echo "Generated: $ts"
+  echo "Version:   $VERSION"
+  echo ""
+
+  step "MDM Enrollment State"
+  if command -v profiles &>/dev/null; then
+    sudo profiles status -type enrollment 2>/dev/null || echo "  (cannot determine)"
+  fi
+
+  local cfg="/private/var/db/ConfigurationProfiles/Settings"
+  if [ -f "$cfg/.cloudConfigRecordFound" ]; then
+    local org
+    org=$(plutil -convert xml1 -o - "$cfg/.cloudConfigRecordFound" 2>/dev/null \
+      | grep -iA1 OrganizationName | tail -1 | sed -E 's/.*<string>(.*)<\/string>.*/\1/')
+    echo "  DEP record: FOUND${org:+ (Organization: $org)}"
+  else
+    echo "  DEP record: clean"
+  fi
+  echo ""
+
+  step "Installed Profiles"
+  if command -v profiles &>/dev/null; then
+    local count
+    count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+    if [ "$count" -gt 0 ]; then
+      echo "  $count profile(s) installed"
+      sudo profiles -C -output=xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" \
+        | sed 's/.*<string>\(.*\)<\/string>.*/    - \1/'
+    else
+      echo "  No profiles installed"
+    fi
+  fi
+  echo ""
+
+  step "Firewall"
+  if command -v pfctl &>/dev/null; then
+    pfctl -si 2>/dev/null | grep -E "Status|Enabled" || echo "  pf not enabled"
+    echo ""
+    pfctl -a "com.unleash/mdm" -s rules 2>/dev/null \
+      && echo "  Unleash MDM anchor: active" \
+      || echo "  Unleash MDM anchor: not loaded"
+    pfctl -a "com.unleash.selective" -s rules 2>/dev/null \
+      && echo "  Unleash selective anchor: active" \
+      || echo "  Unleash selective anchor: not loaded"
+  fi
+  echo ""
+
+  step "Persistence"
+  [ -f "/Library/LaunchDaemons/com.unleash.heal.plist" ] \
+    && echo "  heal LaunchDaemon: installed" \
+    || echo "  heal LaunchDaemon: not installed"
+  [ -f "/Library/LaunchDaemons/com.unleash.monitor.plist" ] \
+    && echo "  monitor LaunchDaemon: installed" \
+    || echo "  monitor LaunchDaemon: not installed"
+  [ -f "/tmp/unleash-monitor.pid" ] \
+    && echo "  monitor process: running" \
+    || echo "  monitor process: not running"
+  echo ""
+
+  step "Recent Events"
+  for logfile in /var/log/unleash-monitor.log /var/log/unleash-heal.log; do
+    if [ -f "$logfile" ] && [ -s "$logfile" ]; then
+      echo "  From $(basename "$logfile"):"
+      tail -3 "$logfile" | sed 's/^/    /'
+    fi
+  done
+  echo ""
+
+  step "Hosts Block"
+  if grep -q "iprofiles.apple.com" /private/etc/hosts 2>/dev/null; then
+    local blocked
+    blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || echo 0)
+    echo "  $blocked domain(s) blocked in /etc/hosts"
+  else
+    echo "  No block entries found"
+  fi
+  echo ""
+
+  step "Running MDM Processes"
+  local procs
+  procs=$(ps aux 2>/dev/null | grep -iE "mdm|managedclient|activation" | grep -v grep || true)
+  if [ -n "$procs" ]; then
+    echo "$procs" | awk '{print "  " $11 " (PID " $2 ")"}'
+  else
+    echo "  None"
+  fi
+}
+
+detect_migration_assistant() {
+  local data_mount="${1:-}"
+
+  header "Migration Assistant Check"
+
+  local homes=()
+  if [ -n "$data_mount" ] && [ -d "$data_mount/Users" ]; then
+    for h in "$data_mount/Users/"*/; do
+      homes+=("$h")
+    done
+  elif [ -d "/Users" ]; then
+    for h in /Users/*/; do
+      homes+=("$h")
+    done
+  fi
+
+  local ma_indicators=0
+  local details=""
+
+  for home in "${homes[@]}"; do
+    local user
+    user=$(basename "$home")
+    [ "$user" = "Guest" ] || [ "$user" = "Shared" ] && continue
+    [ -d "$home/Library" ] || continue
+
+    local user_agents="$home/Library/LaunchAgents"
+    if [ -d "$user_agents" ]; then
+      local found
+      found=$(ls "$user_agents" 2>/dev/null | grep -ciE "mdm|enrollment|managed" || true)
+      if [ "$found" -gt 0 ]; then
+        ma_indicators=$((ma_indicators + found))
+        details="$details  $user: $found MDM LaunchAgent(s)\n"
+      fi
+    fi
+
+    local prefs="$home/Library/Preferences"
+    if [ -d "$prefs" ]; then
+      local mdm_prefs
+      mdm_prefs=$(ls "$prefs"/com.apple.mdm* "$prefs"/com.apple.ManagedClient* 2>/dev/null | head -3 || true)
+      if [ -n "$mdm_prefs" ]; then
+        ma_indicators=$((ma_indicators + 1))
+        details="$details  $user: MDM preference files\n"
+      fi
+    fi
+
+    local support="$home/Library/Application Support/com.apple.ManagedClient"
+    if [ -d "$support" ]; then
+      ma_indicators=$((ma_indicators + 1))
+      details="$details  $user: ManagedClient Application Support\n"
+    fi
+  done
+
+  if [ "$ma_indicators" -gt 0 ]; then
+    echo -e "${YEL}⚠ Migration Assistant artifacts detected:${NC}"
+    echo -e "$details" | sed '/^$/d'
+    echo ""
+    echo -e "${YEL}These user-level artifacts can re-enable MDM on every login.${NC}"
+    echo -e "${YEL}Fix: run 'sudo ./unleash harden' or './unleash suppress' from Recovery.${NC}"
+    return 1
+  else
+    echo -e "${GRN}✓ No Migration Assistant artifacts found${NC}"
+    return 0
+  fi
+}
+
 
 show_help() {
 	cat <<'HELP'
@@ -1625,6 +2163,18 @@ Bypass / suppress / monitor MDM enrollment on macOS.
     restore         Revert from backup
     dualboot        Target an external macOS install
 
+  Diagnostics:
+    doctor          Run pre-flight checks on this environment
+    report          Generate a full markdown status report
+    history         Show event log from monitor/heal runs
+    test            Dry-run mode: simulate without changing anything
+
+  Management:
+    config          View/edit persistent settings (~/.unleash.conf)
+    update          Self-update to the latest GitHub release
+    uninstall       Remove all Unleash traces from the system
+    reinstall       Uninstall + reinstall (persist + whitelist + monitor)
+
   Info:
     status          Show MDM enrollment status (Recovery only)
     version         Show version
@@ -1643,6 +2193,10 @@ ALIASES
     mn-uninstall    monitor-uninstall
     mn-stop         monitor-stop
     mn-st           monitor-status
+    doc             doctor
+    up              update
+    uni             uninstall
+    rei             reinstall
 
 OPTIONS
     --verbose       Show debug messages
@@ -2033,6 +2587,7 @@ parse_global_opts() {
 }
 
 main() {
+	load_config
 	eval "set -- $(parse_global_opts "$@")"
 
 	case "${1:-}" in
@@ -2060,6 +2615,18 @@ main() {
 		monitor-stop|mn-stop) cmd_monitor_stop ;;
 		monitor-status|mn-st) cmd_monitor_status ;;
 		version|-v|--version) cmd_version ;;
+		doctor)           run_doctor ;;
+		update)           do_self_update ;;
+		uninstall)        do_uninstall ;;
+		report)           generate_report ;;
+		config)           cmd_config "$@" ;;
+		reinstall)
+			do_uninstall
+			install_persist_launchdaemon ""
+			install_selective_block ""
+			install_monitor_launchdaemon ""
+			success "Reinstall complete"
+			;;
 		help|-h|--help)   show_help; exit 0 ;;
 		"")
 			if is_recovery; then

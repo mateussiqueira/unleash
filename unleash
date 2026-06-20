@@ -1,12 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
-VERSION="1.3.0"
+VERSION="1.4.0"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
-for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor history; do
+for _lib in colors config detect validate dscl suppress backup status heal firewall harden whitelist check monitor history doctor selfupdate uninstall report ma_detect; do
 	_lib_path="$LIB_DIR/$_lib.sh"
 	if [ -f "$_lib_path" ]; then
 		source "$_lib_path"
@@ -57,6 +57,18 @@ Bypass / suppress / monitor MDM enrollment on macOS.
     restore         Revert from backup
     dualboot        Target an external macOS install
 
+  Diagnostics:
+    doctor          Run pre-flight checks on this environment
+    report          Generate a full markdown status report
+    history         Show event log from monitor/heal runs
+    test            Dry-run mode: simulate without changing anything
+
+  Management:
+    config          View/edit persistent settings (~/.unleash.conf)
+    update          Self-update to the latest GitHub release
+    uninstall       Remove all Unleash traces from the system
+    reinstall       Uninstall + reinstall (persist + whitelist + monitor)
+
   Info:
     status          Show MDM enrollment status (Recovery only)
     version         Show version
@@ -75,6 +87,10 @@ ALIASES
     mn-uninstall    monitor-uninstall
     mn-stop         monitor-stop
     mn-st           monitor-status
+    doc             doctor
+    up              update
+    uni             uninstall
+    rei             reinstall
 
 OPTIONS
     --verbose       Show debug messages
@@ -465,6 +481,7 @@ parse_global_opts() {
 }
 
 main() {
+	load_config
 	eval "set -- $(parse_global_opts "$@")"
 
 	case "${1:-}" in
@@ -492,6 +509,18 @@ main() {
 		monitor-stop|mn-stop) cmd_monitor_stop ;;
 		monitor-status|mn-st) cmd_monitor_status ;;
 		version|-v|--version) cmd_version ;;
+		doctor)           run_doctor ;;
+		update)           do_self_update ;;
+		uninstall)        do_uninstall ;;
+		report)           generate_report ;;
+		config)           cmd_config "$@" ;;
+		reinstall)
+			do_uninstall
+			install_persist_launchdaemon ""
+			install_selective_block ""
+			install_monitor_launchdaemon ""
+			success "Reinstall complete"
+			;;
 		help|-h|--help)   show_help; exit 0 ;;
 		"")
 			if is_recovery; then
