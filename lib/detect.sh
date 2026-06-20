@@ -1,4 +1,3 @@
-# unleash/lib/detect.sh — Volume, mode, and environment detection
 
 is_recovery() {
 	[ -d "/System/Installation" ] && return 0

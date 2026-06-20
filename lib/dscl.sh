@@ -1,4 +1,3 @@
-# unleash/lib/dscl.sh — Directory Services operations
 
 dscl_node() {
 	local data_mount="$1"

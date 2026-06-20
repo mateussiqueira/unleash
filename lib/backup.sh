@@ -1,4 +1,3 @@
-# unleash/lib/backup.sh — Backup and restore engine
 
 BACKUP_DIR="$(dirname "$(dirname "$0")")/.unleash-backup"
 

@@ -1,4 +1,3 @@
-# unleash/lib/firewall.sh — pf firewall management for MDM blocking
 
 FIREWALL_ANCHOR="com.unleash/mdm"
 FIREWALL_CONF="/etc/pf.conf"

@@ -1,4 +1,3 @@
-# unleash/lib/validate.sh — Input validation helpers
 
 validate_username() {
 	local u="$1"

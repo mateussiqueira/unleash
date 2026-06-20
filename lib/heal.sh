@@ -1,4 +1,3 @@
-# unleash/lib/heal.sh — Self-healing and boot persistence
 
 heal_suppress() {
 	local data_mount="$1"

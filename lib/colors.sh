@@ -1,4 +1,3 @@
-# unleash/lib/colors.sh — UI helpers and color system
 
 RED='\033[1;31m'
 GRN='\033[1;32m'

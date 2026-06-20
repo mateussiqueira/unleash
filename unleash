@@ -1,37 +1,13 @@
 #!/bin/bash
 set -euo pipefail
 
-# unleash — Unified MDM bypass tool for macOS.
-# One script to rule them all: bypass, suppress, backup, restore, dualboot, status.
-#
-# Usage:
-#   ./unleash                    Interactive menu (auto-detects Recovery/dualboot)
-#   ./unleash bypass             Full bypass (create admin + suppress)
-#   ./unleash suppress           Suppress-only (no user created)
-#   ./unleash heal               Check and re-apply suppression (auto-heal)
-#   ./unleash persist            Install LaunchDaemon for boot-time persistence
-#   ./unleash unpersist          Remove the persistence LaunchDaemon
-#   ./unleash firewall           Block Apple MDM IP ranges via pf (kernel-level)
-#   ./unleash firewall-off       Remove pf firewall MDM block
-#   ./unleash harden             Live-OS hardening (kill MDM, remove profiles)
-#   ./unleash audit              Deep MDM audit (profiles, certs, agents, processes)
-#   ./unleash whitelist          Selective block (block MDM only, keep iCloud/App Store)
-#   ./unleash backup             Backup current state
-#   ./unleash restore            Restore from backup
-#   ./unleash dualboot           Target a different volume (needs sudo)
-#   ./unleash status             Check current MDM status
-#   ./unleash version            Show version
-#
-# Put this on an external SSD and run from Recovery.
-# No curl, no downloads, no typing URLs.
+# Single-script MDM bypass for macOS. Recovery mode. Apple Silicon + Intel.
 
 VERSION="1.1.0"
 
-# Determine script location (works with symlinks and source)
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
-# Source library modules
 for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist; do
 	_lib_path="$LIB_DIR/$_lib.sh"
 	if [ -f "$_lib_path" ]; then
@@ -43,9 +19,6 @@ for _lib in colors detect validate dscl suppress backup status heal firewall har
 	fi
 done
 
-# ------------------------------------------------------------------
-# Command handlers
-# ------------------------------------------------------------------
 cmd_version() {
 	echo "unleash v$VERSION"
 	exit 0
@@ -370,9 +343,6 @@ cmd_interactive_normal() {
 	done
 }
 
-# ------------------------------------------------------------------
-# CLI dispatch
-# ------------------------------------------------------------------
 main() {
 	case "${1:-}" in
 		bypass)    cmd_bypass ;;
@@ -391,7 +361,7 @@ main() {
 		status)      cmd_status ;;
 		version|-v|--version) cmd_version ;;
 		help|-h|--help)
-			head -50 "$0" | grep -E '^#   |^# \$'
+			echo "Usage: $0 {bypass|suppress|heal|persist|unpersist|firewall|firewall-off|harden|audit|whitelist|backup|restore|dualboot|status|version|help}"
 			exit 0
 			;;
 		"")

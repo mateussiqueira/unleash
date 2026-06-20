@@ -1,5 +1,4 @@
-# unleash/lib/suppress.sh — Core MDM suppression logic
-# All paths target the Data volume (SSV-safe).
+
 
 PB=/usr/libexec/PlistBuddy
 

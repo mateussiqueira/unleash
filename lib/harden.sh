@@ -1,4 +1,3 @@
-# unleash/lib/harden.sh — Live-OS hardening post-bypass
 
 harden_live_os() {
 	step "Killing running MDM processes..."

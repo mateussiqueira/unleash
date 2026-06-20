@@ -1,4 +1,3 @@
-# unleash/lib/status.sh — Verify and status check
 
 check_mdm_status() {
 	local data_mount="$1"
