@@ -6,7 +6,7 @@ setup() {
 }
 
 @test "do_uninstall requires root" {
-  EUID=501
+  function is_root() { false; }
   run do_uninstall 2>/dev/null || true
   [ "$status" -ne 0 ]
 }

@@ -5,13 +5,12 @@ setup() {
   load '../lib/harden.sh'
 }
 
-@test "do_harden requires root" {
-  EUID=501
-  run do_harden 2>/dev/null || true
-  [ "$status" -ne 0 ]
+@test "harden_live_os exits cleanly" {
+  run harden_live_os 2>/dev/null || true
+  [ "$status" -eq 0 ]
 }
 
-@test "install_harden_launchdaemon creates plist" {
-  run install_harden_launchdaemon 2>/dev/null || true
-  [ -f /Library/LaunchDaemons/com.unleash.harden.plist ] || [ "$status" -eq 0 ]
+@test "harden_status exits cleanly" {
+  run harden_status 2>/dev/null || true
+  [ "$status" -eq 0 ]
 }

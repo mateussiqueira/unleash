@@ -2381,6 +2381,29 @@ detect_migration_assistant() {
   fi
 }
 
+clean_ma_artifacts() {
+  local data_mount="${1:-}"
+  local homes=()
+  if [ -n "$data_mount" ] && [ -d "$data_mount/Users" ]; then
+    for h in "$data_mount/Users/"*/; do homes+=("$h"); done
+  elif [ -d "/Users" ]; then
+    for h in /Users/*/; do homes+=("$h"); done
+  fi
+  for home in "${homes[@]}"; do
+    local user
+    user=$(basename "$home")
+    [ "$user" = "Guest" ] || [ "$user" = "Shared" ] && continue
+    [ -d "$home/Library" ] || continue
+    rm -f "$home/Library/Preferences/com.apple.mdm.plist" 2>/dev/null || true
+    rm -f "$home/Library/Preferences/com.apple.mdmclient.plist" 2>/dev/null || true
+    rm -f "$home/Library/Preferences/com.apple.ManagedClient.plist" 2>/dev/null || true
+    rm -rf "$home/Library/Caches/com.apple.enrollmenttool" 2>/dev/null || true
+    rm -rf "$home/Library/Caches/com.apple.mdm" 2>/dev/null || true
+    rm -rf "$home/Library/Application Support/com.apple.ManagedClient" 2>/dev/null || true
+  done
+  info "User-level MDM artifacts cleaned"
+}
+
 run_demo() {
   header "Unleash Demo — Simulated MDM Bypass"
 

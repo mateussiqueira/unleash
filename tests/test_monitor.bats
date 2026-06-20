@@ -22,14 +22,14 @@ teardown() {
 
 @test "install_monitor_launchdaemon creates plist file" {
   SCRIPT_DIR="$TEST_DIR"
-  mkdir -p "$TEST_DIR/unleash"
+  mkdir -p "$TEST_DIR"
   run install_monitor_launchdaemon "$TEST_DIR" 2>/dev/null || true
   [ -f "$TEST_DIR/Library/LaunchDaemons/com.unleash.monitor.plist" ]
 }
 
 @test "install_monitor_launchdaemon plist is valid xml" {
   SCRIPT_DIR="$TEST_DIR"
-  mkdir -p "$TEST_DIR/unleash"
+  mkdir -p "$TEST_DIR"
   run install_monitor_launchdaemon "$TEST_DIR" 2>/dev/null || true
   run grep -c "plist" "$TEST_DIR/Library/LaunchDaemons/com.unleash.monitor.plist"
   [ "$output" -gt 0 ]
@@ -37,15 +37,13 @@ teardown() {
 
 @test "install_monitor_launchdaemon references unleash binary" {
   SCRIPT_DIR="$TEST_DIR"
-  mkdir -p "$TEST_DIR/unleash"
-  touch "$TEST_DIR/unleash/unleash"
+  mkdir -p "$TEST_DIR"
   run install_monitor_launchdaemon "$TEST_DIR" 2>/dev/null || true
   run grep -c "unleash" "$TEST_DIR/Library/LaunchDaemons/com.unleash.monitor.plist"
   [ "$output" -gt 0 ]
 }
 
 @test "uninstall_monitor_launchdaemon removes plist" {
-  SCRIPT_DIR="$TEST_DIR"
   mkdir -p "$TEST_DIR/Library/LaunchDaemons"
   touch "$TEST_DIR/Library/LaunchDaemons/com.unleash.monitor.plist"
   run uninstall_monitor_launchdaemon "$TEST_DIR" 2>/dev/null || true
@@ -53,7 +51,7 @@ teardown() {
 }
 
 @test "monitor_mdm requires root" {
-  EUID=501
+  function is_root() { false; }
   run monitor_mdm 2>/dev/null || true
   [ "$status" -ne 0 ]
 }
