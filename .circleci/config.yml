@@ -1,0 +1,52 @@
+version: 2.1
+
+jobs:
+  lint:
+    docker:
+      - image: koalaman/shellcheck-alpine:stable
+    steps:
+      - checkout
+      - run:
+          name: ShellCheck
+          command: |
+            apk add bash
+            for f in unleash lib/*.sh examples/*.sh; do
+              [ -f "$f" ] || continue
+              echo "Checking: $f"
+              shellcheck -S warning "$f" || exit 1
+            done
+
+  syntax:
+    docker:
+      - image: alpine:latest
+    steps:
+      - checkout
+      - run:
+          name: Bash Syntax Check
+          command: |
+            apk add bash
+            for f in unleash lib/*.sh examples/*.sh; do
+              [ -f "$f" ] || continue
+              echo "Checking: $f"
+              bash -n "$f" || exit 1
+            done
+
+  markdown:
+    docker:
+      - image: alpine:latest
+    steps:
+      - checkout
+      - run:
+          name: Markdown Lint
+          command: |
+            apk add npm
+            npm install -g markdownlint-cli
+            markdownlint '*.md' || true
+
+workflows:
+  version: 2
+  ci:
+    jobs:
+      - lint
+      - syntax
+      - markdown
