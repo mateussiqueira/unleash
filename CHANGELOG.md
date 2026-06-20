@@ -1,9 +1,30 @@
 # Changelog
 
+## [1.2.0] — 2026-06-20
+
+### Added
+- **check**: Pre-format / pre-upgrade assessment (will this Mac lock after wipe?)
+- **monitor**: Background daemon that watches MDM every 5 minutes and auto-heals
+- **monitor-stop**: Stop the background monitor
+- **monitor-status**: Check if monitor is running
+- GitHub repo About section updated with description and topics
+
+## [1.1.0] — 2026-06-20
+
+### Added
+- Project files: CONTRIBUTING.md, CODE_OF_CONDUCT.md, SECURITY.md, CHANGELOG.md
+- GitHub issue templates (bug, feature, compatibility)
+- GitHub Actions CI (ShellCheck, syntax check, markdown lint)
+- Badges and professional README layout
+
+### Changed
+- Humanized code: removed AI artifacts, file headers, section comments
+- README rewritten from scratch (625 → 140 lines)
+
 ## [1.0.0] — 2026-06-20
 
 ### Added
-- Initial release of unleashes — Unified MDM Bypass for macOS
+- Initial release of unleash — Unified MDM Bypass for macOS
 - **bypass**: Full MDM bypass with admin user creation (Recovery mode)
 - **suppress**: Suppress MDM enrollment without creating a user
 - **heal**: Auto-heal — check and re-apply suppression after macOS updates

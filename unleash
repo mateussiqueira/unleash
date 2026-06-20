@@ -3,12 +3,12 @@ set -euo pipefail
 
 # Single-script MDM bypass for macOS. Recovery mode. Apple Silicon + Intel.
 
-VERSION="1.1.0"
+VERSION="1.2.0"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 LIB_DIR="$SCRIPT_DIR/lib"
 
-for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist; do
+for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor; do
 	_lib_path="$LIB_DIR/$_lib.sh"
 	if [ -f "$_lib_path" ]; then
 		# shellcheck disable=SC1090
@@ -226,6 +226,28 @@ cmd_status() {
 	fi
 }
 
+cmd_check() {
+  header "unleash — Pre-Format Assessment"
+  if ! is_root; then
+    error_exit "Check requires sudo: sudo ./unleash check"
+  fi
+  run_preformat_check
+  echo ""
+  check_upgrade_safety
+}
+
+cmd_monitor() {
+  monitor_mdm
+}
+
+cmd_monitor_stop() {
+  stop_monitor
+}
+
+cmd_monitor_status() {
+  monitor_status
+}
+
 cmd_interactive_recovery() {
 	header "unleash — Recovery Mode"
 
@@ -359,9 +381,13 @@ main() {
 		restore)     cmd_restore ;;
 		dualboot)    cmd_dualboot ;;
 		status)      cmd_status ;;
+		check)       cmd_check ;;
+		monitor)     cmd_monitor ;;
+		monitor-stop) cmd_monitor_stop ;;
+		monitor-status) cmd_monitor_status ;;
 		version|-v|--version) cmd_version ;;
 		help|-h|--help)
-			echo "Usage: $0 {bypass|suppress|heal|persist|unpersist|firewall|firewall-off|harden|audit|whitelist|backup|restore|dualboot|status|version|help}"
+			echo "Usage: $0 {bypass|suppress|heal|persist|unpersist|firewall|firewall-off|harden|audit|whitelist|check|monitor|monitor-stop|monitor-status|backup|restore|dualboot|status|version|help}"
 			exit 0
 			;;
 		"")
@@ -373,7 +399,7 @@ main() {
 			;;
 		*)
 			echo -e "${RED}Unknown command: $1${NC}" >&2
-			echo "Usage: $0 {bypass|suppress|heal|persist|unpersist|firewall|firewall-off|harden|audit|whitelist|backup|restore|dualboot|status|version|help}" >&2
+			echo "Usage: $0 {bypass|suppress|heal|persist|unpersist|firewall|firewall-off|harden|audit|whitelist|check|monitor|monitor-stop|monitor-status|backup|restore|dualboot|status|version|help}" >&2
 			exit 1
 			;;
 	esac

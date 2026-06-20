@@ -32,8 +32,28 @@ No internet needed if running from an SSD. No SIP to disable.
 | `backup` | Save current hosts, profiles, launchd state |
 | `restore` | Revert from backup |
 | `dualboot` | Target an external macOS install |
+| `check` | Pre-format report: will this Mac lock after a wipe? |
+| `monitor` | Background daemon that watches MDM state and auto-heals |
+| `monitor-stop` | Stop the background monitor |
+| `monitor-status` | Check if monitor is running |
 
 Just `./unleash` with no argument shows an interactive menu.
+
+### Monitor
+
+```bash
+sudo ./unleash monitor
+```
+
+Runs in the background and checks MDM state every 5 minutes. If MDM tries to re-enroll, it auto-heals and sends a macOS notification. Survives reboots only if combined with `unleash persist` (which can run the monitor instead of heal). Logs to `/var/log/unleash-monitor.log`.
+
+### Check
+
+```bash
+sudo ./unleash check
+```
+
+Answers one question: **"If I wipe this Mac, will it lock?"** Checks DEP records, profiles, enrollment state, firewall, and persistence. Also checks if a macOS upgrade is safe.
 
 ## How it works
 

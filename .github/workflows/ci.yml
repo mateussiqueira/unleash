@@ -29,6 +29,8 @@ jobs:
             lib/firewall.sh
             lib/harden.sh
             lib/whitelist.sh
+            lib/check.sh
+            lib/monitor.sh
 
   syntax:
     name: Bash Syntax Check
