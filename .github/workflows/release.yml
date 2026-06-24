@@ -1,0 +1,43 @@
+name: Update Homebrew Formula
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-homebrew:
+    name: Update homebrew-unleash formula
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          repository: mateussiqueira/homebrew-unleash
+          token: ${{ secrets.GH_PAT || github.token }}
+
+      - name: Download release artifact and compute SHA
+        id: sha
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          curl -sL "https://github.com/mateussiqueira/unleash/releases/download/${TAG}/unleash-standalone.sh" -o /tmp/unleash-standalone.sh
+          SHA=$(shasum -a 256 /tmp/unleash-standalone.sh | cut -d' ' -f1)
+          echo "sha=${SHA}" >> $GITHUB_OUTPUT
+          echo "tag=${TAG}" >> $GITHUB_OUTPUT
+
+      - name: Update formula URL and SHA
+        run: |
+          VERSION="${{ github.event.release.tag_name }}"
+          VERSION="${VERSION#v}"
+          SHA="${{ steps.sha.outputs.sha }}"
+          TAG="${{ steps.sha.outputs.tag }}"
+
+          sed -i "s|url \".*\"|url \"https://raw.githubusercontent.com/mateussiqueira/unleash/${TAG}/unleash-standalone.sh\"|" Formula/unleash.rb
+          sed -i "s|version \".*\"|version \"${VERSION}\"|" Formula/unleash.rb
+          sed -i "s|sha256 \".*\"|sha256 \"${SHA}\"|" Formula/unleash.rb
+
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add Formula/unleash.rb
+          git diff --cached --quiet || git commit -m "chore: update formula to ${{ github.event.release.tag_name }}"
+          git push
