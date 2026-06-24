@@ -1,3 +1,9 @@
+---
+layout: default
+title: unleash
+description: Single-script MDM bypass for macOS — covers all 5 layers of Apple MDM enrollment
+---
+
 <p align="center">
   <img src="icon.svg" width="100" alt="unleash logo">
   <br>

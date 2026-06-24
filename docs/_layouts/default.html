@@ -8,14 +8,42 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="theme-color" content="#157878">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="stylesheet" href="{{ '/assets/css/style.css?v=' | append: site.github.build_revision | relative_url }}">
+    <link rel="stylesheet" href="{{ '/assets/css/style.css' | relative_url }}">
     {% include head-custom.html %}
     <style>
 .lang-toggle{position:fixed;top:12px;right:12px;z-index:1000;display:flex;gap:2px;background:#fff;border:1px solid #d0d7de;border-radius:6px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.12)}.lang-toggle a{padding:4px 10px;font-size:13px;font-weight:500;text-decoration:none;color:#656d76;transition:background .15s,color .15s}.lang-toggle a:hover{background:#0969da;color:#fff}.lang-toggle a.active{background:#0969da;color:#fff;cursor:default}@media(prefers-color-scheme:dark){.lang-toggle{background:#161b22;border-color:#30363d}.lang-toggle a{color:#8b949e}.lang-toggle a:hover{background:#1f6feb;color:#fff}.lang-toggle a.active{background:#1f6feb;color:#fff;cursor:default}}
+:root{--nav-w:220px}@media(min-width:64em){.main-content{margin-left:var(--nav-w);max-width:calc(64rem - var(--nav-w))}.nav{position:fixed;top:0;left:0;width:var(--nav-w);height:100vh;background:#f6f8fa;border-right:1px solid #d0d7de;padding:1rem;overflow-y:auto;z-index:999;font-size:14px}}@media(max-width:64em){.nav{display:none}}.nav a{display:block;padding:4px 8px;color:#24292f;text-decoration:none;border-radius:4px;margin-bottom:2px}.nav a:hover{background:#ddf4ff}.nav a.active{background:#0969da;color:#fff;font-weight:600}.nav h3{font-size:11px;text-transform:uppercase;letter-spacing:1px;color:#656d76;margin:16px 0 4px 8px}.nav .logo{font-size:18px;font-weight:700;color:#159957;padding:8px;margin-bottom:8px;text-decoration:none;border-bottom:1px solid #d0d7de}#search-wrap{position:relative;margin:0 0 12px 8px}#search-input{width:calc(100% - 16px);padding:6px 8px;border:1px solid #d0d7de;border-radius:6px;font-size:13px;background:#fff}#search-input:focus{outline:none;border-color:#0969da}#search-results{display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1px solid #d0d7de;border-radius:6px;box-shadow:0 4px 12px rgba(0,0,0,.15);z-index:1001;max-height:300px;overflow-y:auto}.search-result-item{padding:8px;border-bottom:1px solid #f0f0f0;cursor:pointer}.search-result-item:last-child{border-bottom:none}.search-result-item:hover{background:#f6f8fa}.search-result-item strong{display:block;font-size:13px;color:#0969da}.search-snippet{font-size:11px;color:#656d76;display:block;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
     </style>
   </head>
   <body>
     <a id="skip-to-content" href="#content">Skip to the content.</a>
+
+    <nav class="nav" role="navigation" aria-label="Documentation navigation">
+      <a href="/" class="logo" data-pt="/pt/">unleash</a>
+
+      <div id="search-wrap">
+        <input type="text" id="search-input" placeholder="Search docs..." autocomplete="off">
+        <div id="search-results"></div>
+      </div>
+
+      <h3>Getting Started</h3>
+      <a href="/" data-pt="/pt/">Home</a>
+      <a href="/install" data-pt="/pt/install">Installation</a>
+      <a href="/commands" data-pt="/pt/commands">Commands</a>
+
+      <h3>Guides</h3>
+      <a href="/guide" data-pt="/pt/guide">Architecture Guide</a>
+      <a href="/scenarios" data-pt="/pt/scenarios">Scenarios</a>
+
+      <h3>Reference</h3>
+      <a href="/troubleshooting" data-pt="/pt/troubleshooting">Troubleshooting</a>
+      <a href="/faq" data-pt="/pt/faq">FAQ</a>
+      <a href="/security" data-pt="/pt/security">Security</a>
+
+      <h3>External</h3>
+      <a href="https://github.com/mateussiqueira/unleash" target="_blank">GitHub</a>
+      <a href="https://github.com/mateussiqueira/unleash/blob/main/CHANGELOG.md" target="_blank">Changelog</a>
+    </nav>
 
     <header class="page-header" role="banner">
       <h1 class="project-name">{{ page.title | default: site.title | default: site.github.repository_name }}</h1>
@@ -45,8 +73,9 @@
       <a href="#" data-lang="pt">PT</a>
     </div>
 
+    <script src="{{ '/assets/js/search.js' | relative_url }}"></script>
     <script>
-(function(){var p=window.location.pathname.replace(/\/unleash/,'')||'/';var i=p.startsWith('/pt');var e=p.replace(/^\/pt/,'')||'/';var t='/pt'+(p==='/'||p==='/pt'?'':p.replace(/^\/pt/,''))||'/pt/';document.querySelectorAll('.lang-toggle a').forEach(function(l){var n=l.getAttribute('data-lang');l.href='/unleash'+(n==='en'?e:t).replace(/\/+/g,'/');if((n==='en'&&!i)||(n==='pt'&&i))l.classList.add('active')})})();
+(function(){var p=window.location.pathname.replace(/\/$/,'')||'/';var i=p.startsWith('/pt');var e=i?p.replace(/^\/pt/,'')||'/':p;var t='/pt'+p;document.querySelectorAll('.lang-toggle a').forEach(function(l){var n=l.getAttribute('data-lang');l.href=n==='en'?e:t;if((n==='en'&&!i)||(n==='pt'&&i))l.classList.add('active')});if(i){document.querySelectorAll('.nav a[data-pt]').forEach(function(a){a.href=a.getAttribute('data-pt')})}var c=document.querySelector('.nav a[href="'+p+'"],.nav a[href="'+p+'.html"]');if(!c&&i){var en=p.replace(/^\/pt/,'')||'/';c=document.querySelector('.nav a[href="'+en+'"],.nav a[href="'+en+'.html"]')}if(c)c.classList.add('active')})();
     </script>
   </body>
 </html>

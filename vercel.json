@@ -1,0 +1,12 @@
+{
+  "git": {
+    "deploymentEnabled": {
+      "main": true
+    }
+  },
+  "installCommand": "cd docs && bundle install",
+  "buildCommand": "cd docs && jekyll build",
+  "outputDirectory": "docs/_site",
+  "framework": "jekyll",
+  "cleanUrls": true
+}

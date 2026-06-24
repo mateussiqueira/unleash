@@ -1,9 +1,15 @@
+---
+layout: default
+title: unleash
+description: Bypass MDM em um único script para macOS — cobre todas as 5 camadas do MDM da Apple
+---
+
 <p align="center">
   <img src="../icon.svg" width="100" alt="unleash logo">
   <br>
   <strong>unleash</strong>
   <br>
-  <em>Script único de bypass MDM para macOS</em>
+  <em>unleash</em>
 </p>
 
 <p align="center">
