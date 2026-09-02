@@ -9,6 +9,9 @@ cat > "$OUT" << HEADER
 #!/bin/bash
 set -euo pipefail
 VERSION="$VERSION"
+SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
+SCRIPT_PATH="\$SCRIPT_DIR/\$(basename "\$0")"
+LIB_DIR="\$SCRIPT_DIR/lib"
 HEADER
 
 for lib in colors config detect validate dscl suppress backup status heal firewall harden whitelist check monitor history doctor selfupdate uninstall report ma_detect demo vpn; do

@@ -26,3 +26,22 @@ teardown() {
   run deep_status_json 2>/dev/null || true
   echo "$output" | grep -q "}"
 }
+
+@test "deep_status handles zero profiles under nounset" {
+  local mock_bin="$TEST_DIR/bin"
+  mkdir -p "$mock_bin"
+
+  printf '#!/bin/bash\nexit 0\n' > "$mock_bin/profiles"
+  printf '#!/bin/bash\nexec "$@"\n' > "$mock_bin/sudo"
+  chmod +x "$mock_bin/profiles" "$mock_bin/sudo"
+
+  run env PATH="$mock_bin:$PATH" bash -u -c '
+    source "$1/lib/colors.sh"
+    source "$1/lib/status.sh"
+    pf_status() { :; }
+    deep_status
+  ' bash "$BATS_TEST_DIRNAME/.."
+
+  [ "$status" -eq 0 ]
+  [[ "$output" != *"integer expression expected"* ]]
+}

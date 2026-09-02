@@ -3,17 +3,19 @@ run_doctor() {
 
   local errors=0 warnings=0
 
+  local script_dir="${SCRIPT_DIR:-}"
   begin "Script location"
-  if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR" ]; then
-    end_ok; echo "     $SCRIPT_DIR"
+  if [ -n "$script_dir" ] && [ -d "$script_dir" ]; then
+    end_ok; echo "     $script_dir"
   else
     end_fail; errors=$((errors + 1))
   fi
 
   begin "Library files"
+  local lib_dir="${LIB_DIR:-}"
   local missing=0
   for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor history; do
-    [ -f "$LIB_DIR/$_lib.sh" ] || missing=$((missing + 1))
+    [ -n "$lib_dir" ] && [ -f "$lib_dir/$_lib.sh" ] || missing=$((missing + 1))
   done
   if [ "$missing" -eq 0 ]; then
     end_ok; echo "     13/13 modules loaded"

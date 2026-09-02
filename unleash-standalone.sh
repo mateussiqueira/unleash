@@ -1,6 +1,9 @@
 #!/bin/bash
 set -euo pipefail
 VERSION="2.0.0"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
+LIB_DIR="$SCRIPT_DIR/lib"
 RED='\033[1;31m'
 GRN='\033[1;32m'
 BLU='\033[1;34m'
@@ -167,8 +170,8 @@ cmd_config() {
       cat "$CONFIG_FILE" | sed 's/^/  /'
       ;;
     set)
-      local key="$3"
-      local value="$4"
+      local key="${3:-}"
+      local value="${4:-}"
       [ -z "$key" ] || [ -z "$value" ] && {
         info "Usage: ./unleash config set KEY VALUE"
         info "Keys: WEBHOOK, LOG_LEVEL (verbose), LOG_FILE"
@@ -177,7 +180,7 @@ cmd_config() {
       save_config "$key" "$value"
       ;;
     unset)
-      local key="$3"
+      local key="${3:-}"
       [ -z "$key" ] && { info "Usage: ./unleash config unset KEY"; return 1; }
       if [ -f "$CONFIG_FILE" ]; then
         sed -i '' "/^${key}=/d" "$CONFIG_FILE"
@@ -730,7 +733,9 @@ check_mdm_status() {
 		else
 			echo -e "  ${YEL}(none)${NC}"
 		fi
-		local count; count=$(echo "$matches" | grep -c . 2>/dev/null || echo 0)
+		local count
+		count=$(printf '%s\n' "$matches" | grep -c . 2>/dev/null || true)
+		count="${count:-0}"
 		echo -e "  ${CYAN}Total: $count of 13 expected domains blocked${NC}"
 	else
 		echo -e "  ${YEL}(hosts not found)${NC}"
@@ -782,10 +787,11 @@ deep_status() {
 	step "Installed Configuration Profiles"
 	if command -v profiles &>/dev/null; then
 		local profile_count
-		profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+		profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+		profile_count="${profile_count:-0}"
 		if [ "$profile_count" -gt 0 ]; then
 			warn "$profile_count profile(s) installed:"
-			sudo profiles -C -output=xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" | sed 's/.*<string>\(.*\)<\/string>.*/  - \1/'
+			sudo profiles -C -output stdout-xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" | sed 's/.*<string>\(.*\)<\/string>.*/  - \1/'
 		else
 			info "No configuration profiles installed"
 		fi
@@ -866,7 +872,11 @@ deep_status() {
 
 	step "Overall Assessment"
 	local risk="LOW"
-	[ "$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)" -gt 0 ] && risk="MEDIUM"
+	local cfg="/private/var/db/ConfigurationProfiles/Settings"
+	local profile_count
+	profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+	profile_count="${profile_count:-0}"
+	[ "$profile_count" -gt 0 ] && risk="MEDIUM"
 	ps aux 2>/dev/null | grep -qiE "mdm|managedclient" && risk="HIGH"
 	[ -f "$cfg/.cloudConfigRecordFound" ] && risk="CRITICAL"
 
@@ -886,7 +896,8 @@ deep_status_json() {
 
 	local profile_count=0
 	if command -v profiles &>/dev/null; then
-		profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+		profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+		profile_count="${profile_count:-0}"
 	fi
 	json="${json}  \"profile_count\": $profile_count,\n"
 
@@ -990,11 +1001,11 @@ install_persist_launchdaemon() {
 	local root
 	root="$(_persist_mount_root "$data_mount")"
 
-	local unleash_src
-	if [ -n "$SCRIPT_DIR" ]; then
-		unleash_src="$SCRIPT_DIR/unleash"
-	else
-		unleash_src="$(cd "$(dirname "$0")" && pwd)/unleash"
+	local unleash_src="${SCRIPT_PATH:-}"
+	if [ -z "$unleash_src" ]; then
+		local script_dir
+		script_dir="${SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+		unleash_src="$script_dir/$(basename "$0")"
 	fi
 
 	step "Installing LaunchDaemon for boot-time persistence..."
@@ -1212,7 +1223,7 @@ harden_live_os() {
 	step "Removing residual MDM profiles..."
 	if command -v profiles &>/dev/null; then
 		local installed
-		installed=$(profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+		installed=$(profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
 		if [ "$installed" -gt 0 ]; then
 			sudo profiles -D -F 2>/dev/null && success "Forced profile removal" \
 				|| warn "Profile removal failed"
@@ -1419,7 +1430,8 @@ run_preformat_check() {
   step "Checking installed profiles..."
   if command -v profiles &>/dev/null; then
     local profile_count
-    profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+    profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+    profile_count="${profile_count:-0}"
     if [ "$profile_count" -gt 0 ]; then
       echo -e "  ${YEL}$profile_count profile(s) installed${NC}"
       clean=false
@@ -1504,11 +1516,11 @@ install_monitor_launchdaemon() {
   local root=""
   [ -n "$data_mount" ] && root="$data_mount"
 
-  local unleash_src
-  if [ -n "$SCRIPT_DIR" ]; then
-    unleash_src="$SCRIPT_DIR/unleash"
-  else
-    unleash_src="$(cd "$(dirname "$0")" && pwd)/unleash"
+  local unleash_src="${SCRIPT_PATH:-}"
+  if [ -z "$unleash_src" ]; then
+    local script_dir
+    script_dir="${SCRIPT_DIR:-$(cd "$(dirname "$0")" && pwd)}"
+    unleash_src="$script_dir/$(basename "$0")"
   fi
 
   step "Installing monitor LaunchDaemon..."
@@ -1747,17 +1759,19 @@ run_doctor() {
 
   local errors=0 warnings=0
 
+  local script_dir="${SCRIPT_DIR:-}"
   begin "Script location"
-  if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR" ]; then
-    end_ok; echo "     $SCRIPT_DIR"
+  if [ -n "$script_dir" ] && [ -d "$script_dir" ]; then
+    end_ok; echo "     $script_dir"
   else
     end_fail; errors=$((errors + 1))
   fi
 
   begin "Library files"
+  local lib_dir="${LIB_DIR:-}"
   local missing=0
   for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor history; do
-    [ -f "$LIB_DIR/$_lib.sh" ] || missing=$((missing + 1))
+    [ -n "$lib_dir" ] && [ -f "$lib_dir/$_lib.sh" ] || missing=$((missing + 1))
   done
   if [ "$missing" -eq 0 ]; then
     end_ok; echo "     13/13 modules loaded"
@@ -2109,10 +2123,11 @@ generate_report() {
   step "Installed Profiles"
   if command -v profiles &>/dev/null; then
     local count
-    count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+    count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+    count="${count:-0}"
     if [ "$count" -gt 0 ]; then
       echo "  $count profile(s) installed"
-      sudo profiles -C -output=xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" \
+      sudo profiles -C -output stdout-xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" \
         | sed 's/.*<string>\(.*\)<\/string>.*/    - \1/'
     else
       echo "  No profiles installed"
@@ -2157,7 +2172,8 @@ generate_report() {
   step "Hosts Block"
   if grep -q "iprofiles.apple.com" /private/etc/hosts 2>/dev/null; then
     local blocked
-    blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || echo 0)
+    blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || true)
+    blocked="${blocked:-0}"
     echo "  $blocked domain(s) blocked in /etc/hosts"
   else
     echo "  No block entries found"
@@ -2196,7 +2212,8 @@ generate_report_json() {
 
   local profile_count=0
   if command -v profiles &>/dev/null; then
-    profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+    profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+    profile_count="${profile_count:-0}"
   fi
   report="${report}  \"installed_profiles\": $profile_count,\n"
 
@@ -2226,7 +2243,8 @@ generate_report_json() {
   report="${report}  },\n"
 
   local hosts_blocked=0
-  hosts_blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || echo 0)
+  hosts_blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || true)
+  hosts_blocked="${hosts_blocked:-0}"
   report="${report}  \"hosts_blocked\": $hosts_blocked\n"
 
   report="${report}}"
@@ -2964,7 +2982,11 @@ cmd_monitor() {
   while [ $# -gt 0 ]; do
     case "$1" in
       install|uninstall) args+=("$1"); shift ;;
-      --webhook) webhook="$2"; shift 2 ;;
+      --webhook)
+        [ $# -ge 2 ] || error_exit "--webhook requires a URL"
+        webhook="$2"
+        shift 2
+        ;;
       *) args+=("$1"); shift ;;
     esac
   done
@@ -3123,23 +3145,29 @@ cmd_interactive_normal() {
 	done
 }
 
+PARSED_ARGS=()
+
 parse_global_opts() {
 	local args=()
 	while [ $# -gt 0 ]; do
 		case "$1" in
 			--verbose) VERBOSE=true; shift ;;
 			--dry-run) DRY_RUN=true; shift ;;
-			--log-file) LOG_FILE="$2"; shift 2 ;;
+			--log-file)
+				[ $# -ge 2 ] || error_exit "--log-file requires a path"
+				LOG_FILE="$2"
+				shift 2
+				;;
 			*) args+=("$1"); shift ;;
 		esac
 	done
-	set -- "${args[@]}"
-	echo "$@"
+	PARSED_ARGS=("${args[@]}")
 }
 
 main() {
 	load_config
-	eval "set -- $(parse_global_opts "$@")"
+	parse_global_opts "$@"
+	set -- "${PARSED_ARGS[@]}"
 
 	# Per-command help
 	if [ "${2:-}" = "--help" ] || [ "${2:-}" = "-h" ]; then
@@ -3156,7 +3184,7 @@ main() {
 		firewall|fw)      cmd_firewall ;;
 		firewall-off|fw-off) cmd_firewall_off ;;
 		harden)           cmd_harden ;;
-		audit)            cmd_audit "$2" ;;
+		audit)            cmd_audit "${2:-}" ;;
 		whitelist|wl)     cmd_whitelist ;;
 		backup)           cmd_backup ;;
 		restore)          cmd_restore ;;
@@ -3174,13 +3202,13 @@ main() {
 		version|-v|--version) cmd_version ;;
 		init)            cmd_init ;;
 		suggest)         cmd_suggest ;;
-		remediate)       cmd_remediate "$2" ;;
-		predict)         cmd_predict "$2" ;;
-		telemetry)       telemetry_opt_in "$2" ;;
+		remediate)       cmd_remediate "${2:-}" ;;
+		predict)         cmd_predict "${2:-}" ;;
+		telemetry)       telemetry_opt_in "${2:-}" ;;
 		demo)             run_demo ;;
 		update)           do_self_update ;;
 		uninstall)        do_uninstall ;;
-		report)           generate_report "$2" ;;
+		report)           generate_report "${2:-}" ;;
 		config)           cmd_config "$@" ;;
 		vpn-kill)         vpn_kill_install "$@" ;;
 		vpn-kill-remove)  vpn_kill_remove ;;
@@ -3192,7 +3220,7 @@ main() {
 			install_monitor_launchdaemon ""
 			success "Reinstall complete"
 			;;
-		discord-bot)          cmd_discord_bot_install "$2" "$3" ;;
+		discord-bot)          cmd_discord_bot_install "${2:-}" "${3:-}" ;;
 		discord-bot-stop)     cmd_discord_bot_stop ;;
 		discord-bot-status)   cmd_discord_bot_status ;;
 		help|-h|--help)   show_help; exit 0 ;;

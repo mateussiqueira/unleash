@@ -43,8 +43,8 @@ cmd_config() {
       cat "$CONFIG_FILE" | sed 's/^/  /'
       ;;
     set)
-      local key="$3"
-      local value="$4"
+      local key="${3:-}"
+      local value="${4:-}"
       [ -z "$key" ] || [ -z "$value" ] && {
         info "Usage: ./unleash config set KEY VALUE"
         info "Keys: WEBHOOK, LOG_LEVEL (verbose), LOG_FILE"
@@ -53,7 +53,7 @@ cmd_config() {
       save_config "$key" "$value"
       ;;
     unset)
-      local key="$3"
+      local key="${3:-}"
       [ -z "$key" ] && { info "Usage: ./unleash config unset KEY"; return 1; }
       if [ -f "$CONFIG_FILE" ]; then
         sed -i '' "/^${key}=/d" "$CONFIG_FILE"
