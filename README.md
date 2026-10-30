@@ -77,7 +77,7 @@ Creates a hidden local administrator account on the system without performing an
 1. Finds and mounts the macOS Data volume
 2. Unlocks FileVault if needed
 3. Creates an admin user with a custom username and password
-4. Adds the newly created user to FileVault
+4. Attempts FileVault integration when available; verify it after reboot
 5. Hides the account from the macOS login window via dscl
 6. Conceals the user's home directory in `/Users` using filesystem flags
 

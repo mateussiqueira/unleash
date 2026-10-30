@@ -25,11 +25,14 @@
     run bash -u -c '
       source <(sed '\''/^main "\$@"$/d'\'' "$1")
       DRY_RUN=true
+      is_recovery() { return 0; }
+      resolve_data_volume() { echo TARGET_WAS_ACCESSED; }
       dscl_node() { echo ACCOUNT_STATE_WAS_ACCESSED; return 1; }
-      admin_only_mode "/mock/Data volume"
+      cmd_admin
     ' "$script" "$script"
     [ "$status" -eq 0 ]
     [[ "$output" == *"[DRY RUN] Would create a local admin user"* ]]
     [[ "$output" != *"ACCOUNT_STATE_WAS_ACCESSED"* ]]
+    [[ "$output" != *"TARGET_WAS_ACCESSED"* ]]
   done
 }
