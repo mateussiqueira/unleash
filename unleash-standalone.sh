@@ -178,8 +178,8 @@ cmd_config() {
       cat "$CONFIG_FILE" | sed 's/^/  /'
       ;;
     set)
-      local key="$3"
-      local value="$4"
+      local key="${3:-}"
+      local value="${4:-}"
       [ -z "$key" ] || [ -z "$value" ] && {
         info "Usage: ./unleash config set KEY VALUE"
         info "Keys: WEBHOOK, LOG_LEVEL (verbose), LOG_FILE"
@@ -188,7 +188,7 @@ cmd_config() {
       save_config "$key" "$value"
       ;;
     unset)
-      local key="$3"
+      local key="${3:-}"
       [ -z "$key" ] && { info "Usage: ./unleash config unset KEY"; return 1; }
       if [ -f "$CONFIG_FILE" ]; then
         _rewrite_config "$key" "" unset || return 1
@@ -3015,7 +3015,9 @@ cmd_monitor() {
   while [ $# -gt 0 ]; do
     case "$1" in
       install|uninstall) args+=("$1"); shift ;;
-      --webhook) webhook="$2"; shift 2 ;;
+      --webhook)
+        if [ $# -lt 2 ] || [ -z "$2" ]; then error_exit "--webhook requires a URL"; fi
+        webhook="$2"; shift 2 ;;
       *) args+=("$1"); shift ;;
     esac
   done
@@ -3175,22 +3177,29 @@ cmd_interactive_normal() {
 }
 
 parse_global_opts() {
-	local args=()
+	PARSED_ARGS=()
 	while [ $# -gt 0 ]; do
 		case "$1" in
 			--verbose) VERBOSE=true; shift ;;
 			--dry-run) DRY_RUN=true; shift ;;
-			--log-file) LOG_FILE="$2"; shift 2 ;;
-			*) args+=("$1"); shift ;;
+			--log-file)
+				if [ $# -lt 2 ] || [ -z "$2" ]; then error_exit "--log-file requires a path"; fi
+				case "$2" in --*) error_exit "--log-file requires a path" ;; esac
+				LOG_FILE="$2"; shift 2 ;;
+			--) shift; PARSED_ARGS+=("$@"); break ;;
+			*) PARSED_ARGS+=("$1"); shift ;;
 		esac
 	done
-	set -- "${args[@]}"
-	echo "$@"
 }
 
 main() {
 	load_config
-	eval "set -- $(parse_global_opts "$@")"
+	parse_global_opts "$@"
+	if [ "${PARSED_ARGS[0]+present}" = present ]; then
+		set -- "${PARSED_ARGS[@]}"
+	else
+		set --
+	fi
 
 	# Per-command help
 	if [ "${2:-}" = "--help" ] || [ "${2:-}" = "-h" ]; then
@@ -3207,7 +3216,7 @@ main() {
 		firewall|fw)      cmd_firewall ;;
 		firewall-off|fw-off) cmd_firewall_off ;;
 		harden)           cmd_harden ;;
-		audit)            cmd_audit "$2" ;;
+		audit)            cmd_audit "${2:-}" ;;
 		whitelist|wl)     cmd_whitelist ;;
 		backup)           cmd_backup ;;
 		restore)          cmd_restore ;;
@@ -3225,13 +3234,13 @@ main() {
 		version|-v|--version) cmd_version ;;
 		init)            cmd_init ;;
 		suggest)         cmd_suggest ;;
-		remediate)       cmd_remediate "$2" ;;
-		predict)         cmd_predict "$2" ;;
-		telemetry)       telemetry_opt_in "$2" ;;
+		remediate)       cmd_remediate "${2:-}" ;;
+		predict)         cmd_predict "${2:-}" ;;
+		telemetry)       telemetry_opt_in "${2:-}" ;;
 		demo)             run_demo ;;
 		update)           do_self_update ;;
 		uninstall)        do_uninstall ;;
-		report)           generate_report "$2" ;;
+		report)           generate_report "${2:-}" ;;
 		config)           cmd_config "$@" ;;
 		vpn-kill)         vpn_kill_install "$@" ;;
 		vpn-kill-remove)  vpn_kill_remove ;;
@@ -3243,7 +3252,7 @@ main() {
 			install_monitor_launchdaemon ""
 			success "Reinstall complete"
 			;;
-		discord-bot)          cmd_discord_bot_install "$2" "$3" ;;
+		discord-bot)          cmd_discord_bot_install "${2:-}" "${3:-}" ;;
 		discord-bot-stop)     cmd_discord_bot_stop ;;
 		discord-bot-status)   cmd_discord_bot_status ;;
 		help|-h|--help)   show_help; exit 0 ;;
