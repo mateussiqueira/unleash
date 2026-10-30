@@ -70,11 +70,7 @@ install_persist_launchdaemon() {
 	root="$(_persist_mount_root "$data_mount")"
 
 	local unleash_src
-	if [ -n "$SCRIPT_DIR" ]; then
-		unleash_src="$SCRIPT_DIR/unleash"
-	else
-		unleash_src="$(cd "$(dirname "$0")" && pwd)/unleash"
-	fi
+	unleash_src=$(_launchd_script_path)
 
 	step "Installing LaunchDaemon for boot-time persistence..."
 
@@ -93,8 +89,8 @@ install_persist_launchdaemon() {
 		<key>ProgramArguments</key>
 		<array>
 			<string>/bin/bash</string>
-			<string>-c</string>
-			<string>${unleash_src} heal</string>
+			<string>${unleash_src}</string>
+			<string>heal</string>
 		</array>
 		<key>RunAtLoad</key>
 		<true/>
