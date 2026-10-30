@@ -2,10 +2,9 @@ CONFIG_FILE="$HOME/.unleash.conf"
 
 load_config() {
   [ -f "$CONFIG_FILE" ] || return 0
-
-  while IFS='=' read -r key value; do
+  local key value
+  while IFS='=' read -r key value || [ -n "$key" ]; do
     key="${key// /}"
-    value="${value// /}"
     [ -z "$key" ] && continue
     case "$key" in
       WEBHOOK) DISCORD_WEBHOOK="$value" ;;
@@ -15,18 +14,29 @@ load_config() {
   done < "$CONFIG_FILE"
 }
 
-save_config() {
+_rewrite_config() {
   local key="$1"
   local value="$2"
   local tmp
-
   [ -f "$CONFIG_FILE" ] || touch "$CONFIG_FILE"
-
-  if grep -q "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
-    sed -i '' "s/^${key}=.*/${key}=${value}/" "$CONFIG_FILE"
-  else
-    echo "${key}=${value}" >> "$CONFIG_FILE"
+  tmp=$(mktemp "${CONFIG_FILE}.XXXXXX") || return 1
+  if ! UNLEASH_CONFIG_KEY="$key" UNLEASH_CONFIG_VALUE="$value" \
+    UNLEASH_CONFIG_OPERATION="${3:-set}" awk '
+      BEGIN { key=ENVIRON["UNLEASH_CONFIG_KEY"]; value=ENVIRON["UNLEASH_CONFIG_VALUE"];
+              operation=ENVIRON["UNLEASH_CONFIG_OPERATION"] }
+      index($0, key "=")==1 { if (!found++ && operation=="set") print key "=" value; next }
+      { print }
+      END { if (!found && operation=="set") print key "=" value }
+    ' "$CONFIG_FILE" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
   fi
+  mv "$tmp" "$CONFIG_FILE"
+}
+
+save_config() {
+  local key="$1" value="$2"
+  _rewrite_config "$key" "$value" || return 1
   success "Saved $key to $CONFIG_FILE"
 }
 
@@ -56,7 +66,7 @@ cmd_config() {
       local key="$3"
       [ -z "$key" ] && { info "Usage: ./unleash config unset KEY"; return 1; }
       if [ -f "$CONFIG_FILE" ]; then
-        sed -i '' "/^${key}=/d" "$CONFIG_FILE"
+        _rewrite_config "$key" "" unset || return 1
         success "Removed $key from config"
       fi
       ;;

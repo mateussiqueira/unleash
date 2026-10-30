@@ -38,8 +38,14 @@ teardown() {
   suppress_enrollment "$TEST_DIR" 2>/dev/null || true
   local ldp="$TEST_DIR/private/var/db/com.apple.xpc.launchd/disabled.plist"
   [ -f "$ldp" ]
-  run /usr/libexec/PlistBuddy -c "Print :com.apple.ManagedClient.enroll" "$ldp" 2>/dev/null
+  run "$PB" -c "Print :com.apple.ManagedClient.enroll" "$ldp"
   [ "$output" = "true" ]
+}
+
+@test "PlistBuddy fixture rejects writes outside the test suite" {
+  run "$PB" -c 'Add :test bool true' "$BATS_TEST_DIRNAME/../README.md"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Fixture refused path outside the suite"* ]]
 }
 
 @test "dry-run mode does not write files" {
