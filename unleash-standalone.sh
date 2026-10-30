@@ -1904,7 +1904,7 @@ _network_diagnostics() {
     build=$(sw_vers -buildVersion 2>/dev/null) || build=unavailable
   fi
   printf 'macOS: %s (build %s)\n' "$version" "$build"
-  case "$version" in 27.*) warn "macOS 27 hardware compatibility remains unverified (issue #22)." ;; esac
+  case "$version" in 27.*) warn "macOS 27 has limited community reports; see issue #22 for their scope." ;; esac
   local interface ports
   if ! command -v networksetup >/dev/null; then
     warn "Wi-Fi diagnostics unavailable: networksetup is missing."
