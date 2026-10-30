@@ -425,6 +425,29 @@ add_to_filevault() {
 
 PB="${PB:-/usr/libexec/PlistBuddy}"
 
+_restore_rosetta_hosts() {
+	local hosts="$1" tmp_hosts
+	tmp_hosts=$(mktemp "${hosts}.XXXXXX") || return 1
+	if ! cp -p "$hosts" "$tmp_hosts" || ! awk '
+		$0=="# Added by unleash — DEP enrollment block" { owned=1; print; next }
+		owned && /^(0[.]0[.]0[.]0|::)[[:space:]]+configuration[.]apple[.]com[[:space:]]*$/ { next }
+		owned && $0 !~ /^(0[.]0[.]0[.]0|::)[[:space:]]+[[:alnum:]_.-]+[[:space:]]*$/ { owned=0 }
+		{ print }
+	' "$hosts" > "$tmp_hosts"; then
+		rm -f "$tmp_hosts"
+		return 1
+	fi
+	if cmp -s "$hosts" "$tmp_hosts"; then
+		rm -f "$tmp_hosts"
+		return 0
+	fi
+	if [ ! -e "$hosts.unleash-rosetta.bak" ]; then
+		cp -p "$hosts" "$hosts.unleash-rosetta.bak" || { rm -f "$tmp_hosts"; return 1; }
+	fi
+	mv "$tmp_hosts" "$hosts" || { rm -f "$tmp_hosts"; return 1; }
+	info "Removed old Unleash Rosetta blocks; backup: $hosts.unleash-rosetta.bak"
+}
+
 suppress_enrollment() {
 	local data_mount="$1"
 
@@ -458,6 +481,7 @@ suppress_enrollment() {
 
 	step "Blocking enrollment domains (Data volume hosts)..."
 	[ -f "$hosts" ] || { mkdir -p "$(dirname "$hosts")"; touch "$hosts"; }
+	_restore_rosetta_hosts "$hosts" || error_exit "Could not repair old Rosetta hosts blocks."
 	grep -q "Added by unleash" "$hosts" 2>/dev/null || {
 		echo "" >>"$hosts"
 		echo "# Added by unleash — DEP enrollment block" >>"$hosts"
