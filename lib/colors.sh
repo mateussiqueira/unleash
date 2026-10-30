@@ -32,7 +32,7 @@ log() {
 
   local ts
   ts=$(date '+%H:%M:%S')
-  echo -e "${color}[${label}]${NC} ${msg}"
+  echo -e "${color}[${label}]${NC} ${msg}" >&2
 
   if [ -n "$LOG_FILE" ]; then
     echo "[${ts}] [${label}] ${msg}" >> "$LOG_FILE" 2>/dev/null || true
@@ -40,7 +40,7 @@ log() {
 }
 
 error_exit() {
-  log "ERROR" "$1" >&2
+  log "ERROR" "$1"
   exit 1
 }
 
