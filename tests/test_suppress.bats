@@ -34,6 +34,7 @@ teardown() {
 }
 
 @test "suppress_enrollment disables daemons" {
+  TEST_DIR="$BATS_TEST_TMPDIR/volume"
   DRY_RUN=false
   suppress_enrollment "$TEST_DIR" 2>/dev/null || true
   local ldp="$TEST_DIR/private/var/db/com.apple.xpc.launchd/disabled.plist"
