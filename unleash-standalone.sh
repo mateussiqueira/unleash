@@ -2968,6 +2968,10 @@ cmd_version() {
 
 cmd_bypass() {
 	if is_recovery; then
+		if [ "$DRY_RUN" = true ]; then
+			full_bypass_mode "the selected Data volume"
+			return
+		fi
 		header "Full MDM Bypass"
 		local data_mount
 		data_mount=$(resolve_data_volume)
@@ -2978,6 +2982,10 @@ cmd_bypass() {
 }
 
 cmd_suppress() {
+	if [ "$DRY_RUN" = true ]; then
+		suppress_only_mode "the selected Data volume"
+		return
+	fi
 	header "Suppress Enrollment"
 	local data_mount
 	data_mount=$(resolve_data_volume)
