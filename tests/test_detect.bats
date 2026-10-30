@@ -5,14 +5,11 @@ setup() {
   load '../lib/detect.sh'
 }
 
-@test "is_root returns true when EUID is 0" {
-  [ "$EUID" -eq 0 ] && skip "Already root"
-  [ "$EUID" -ne 0 ] && skip "Not root"
-}
-
-@test "is_root returns false when EUID is not 0" {
-  [ "$EUID" -ne 0 ] && skip "Not root (expected)"
-  [ "$EUID" -eq 0 ] && skip "Is root"
+@test "is_root reports whether the effective user is root" {
+  local expected=1
+  [ "$EUID" -ne 0 ] || expected=0
+  run is_root
+  [ "$status" -eq "$expected" ]
 }
 
 @test "is_recovery returns false in normal environment" {
@@ -26,6 +23,9 @@ setup() {
 }
 
 @test "resolve_data_volume errors on non-existent device" {
-  run resolve_data_volume 2>/dev/null || true
-  [ "$status" -eq 0 ]
+  read() { echo PROMPT_WAS_REACHED; return 1; }
+  run resolve_data_volume </dev/null
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Cannot select a Data volume without a terminal"* ]]
+  [[ "$output" != *"PROMPT_WAS_REACHED"* ]]
 }

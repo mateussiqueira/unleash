@@ -32,7 +32,7 @@ log() {
 
   local ts
   ts=$(date '+%H:%M:%S')
-  echo -e "${color}[${label}]${NC} ${msg}"
+  echo -e "${color}[${label}]${NC} ${msg}" >&2
 
   if [ -n "$LOG_FILE" ]; then
     echo "[${ts}] [${label}] ${msg}" >> "$LOG_FILE" 2>/dev/null || true
@@ -40,7 +40,7 @@ log() {
 }
 
 error_exit() {
-  log "ERROR" "$1" >&2
+  log "ERROR" "$1"
   exit 1
 }
 
@@ -68,7 +68,8 @@ header() {
   local title="$1"
   local len="${#title}"
   local line
-  line=$(printf '%*s' "$((len + 4))" | tr ' ' '═')
+  line=$(printf '%*s' "$((len + 4))" '')
+  line="${line// /═}"
   echo ""
   echo -e "${CYAN}╔${line}╗${NC}"
   echo -e "${CYAN}║  ${title}  ║${NC}"
@@ -107,7 +108,7 @@ prompt_default() {
   local prompt_text="$2"
   local default="$3"
   local value
-  read -p "${CYAN}${prompt_text}${NC} (default '${default}'): " value
+  read -r -p "${CYAN}${prompt_text}${NC} (default '${default}'): " value
   value="${value:=$default}"
   eval "$var_name=\"$value\""
 }
@@ -115,6 +116,6 @@ prompt_default() {
 confirm() {
   local prompt="$1"
   local response
-  read -p "${prompt} (y/N): " response
+  read -r -p "${prompt} (y/N): " response
   [[ "$response" =~ ^[Yy]$ ]]
 }

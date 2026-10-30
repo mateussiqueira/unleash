@@ -54,7 +54,7 @@ do_self_update() {
   fi
   end_ok; echo "     Latest: v$latest_tag"
 
-  if [ "v$latest_tag" = "$(echo "v$VERSION")" ]; then
+  if [ "v$latest_tag" = "v$VERSION" ]; then
     success "Already up to date (v$VERSION)"
     rm -rf "$tmp_dir"
     return 0

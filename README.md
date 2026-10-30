@@ -447,8 +447,19 @@ You need a user password or the FileVault recovery key. If neither is available,
 ### "Not a macOS Data volume"
 Unleash checks for `/private/var/db/dslocal/nodes/Default` on the mounted volume. If it's missing, you mounted the wrong disk. Run `diskutil list` to find the correct one.
 
-### macOS 27 (or future version)
-Unleash should work on any macOS version that uses the same MDM enrollment mechanism. If a new macOS changes the enrollment daemons or DEP markers, open an issue.
+### macOS 27 and later
+
+macOS 27 has no recorded passing hardware validation in this project yet.
+Compatibility is tracked in [#22](https://github.com/mateussiqueira/unleash/issues/22).
+For a compatibility or Wi-Fi report, collect the build and interface state:
+
+```bash
+./unleash doctor --network
+```
+
+This reads the macOS build, Wi-Fi interface, power, and link status. Include
+the script commit, hardware model, and external SSD/hub connection when
+reporting an external-volume problem. It does not certify compatibility.
 
 ### Monitor won't start
 Check if it's already running (`monitor-status`). Check permissions — it needs root. Check logs at `/var/log/unleash-monitor.log`.
@@ -456,7 +467,9 @@ Check if it's already running (`monitor-status`). Check permissions — it needs
 ## FAQ
 
 **What macOS versions are supported?**
-12.x (Monterey) through 15.x (Sequoia), 26.x (Tahoe), and 27.x. Tested on Intel T2, M1, M2, M3, M4, M5.
+The existing targets are macOS 12–15 and 26. Validation depends on the command,
+OS build, and hardware; macOS 27 remains unverified. Shell regression tests
+do not replace testing Recovery, FileVault, and networking on the target Mac.
 
 **Do I need to disable SIP?**
 No. All writes target the Data volume.
@@ -474,6 +487,9 @@ Use `whitelist` instead of `firewall` or `suppress`. It blocks only MDM endpoint
 MA copies user-level caches, preferences, and launch agents. Unleash handles this — run `bypass` or `suppress` from Recovery after migrating.
 
 ## Contributing
+
+Run `make ci` with Bash, Python 3.9+, ShellCheck, and Bats (validated with Bats 1.12).
+The test suite uses temporary volumes and inert macOS command fixtures; it does not validate behavior on real Mac hardware.
 
 See CONTRIBUTING.md. PRs welcome, especially for:
 

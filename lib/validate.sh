@@ -20,7 +20,7 @@ prompt_username() {
 	local var_name="$1"
 	local value
 	while true; do
-		read -p "Username (default 'Apple'): " value
+		read -r -p "Username (default 'Apple'): " value
 		value="${value:=Apple}"
 		if msg=$(validate_username "$value"); then
 			eval "$var_name=\"$value\""
@@ -35,7 +35,7 @@ prompt_password() {
 	local var_name="$1"
 	local value
 	while true; do
-		read -p "Password (default '1234'): " value
+		read -r -p "Password (default '1234'): " value
 		value="${value:=1234}"
 		if msg=$(validate_password "$value"); then
 			eval "$var_name=\"$value\""
