@@ -13,7 +13,8 @@
       suppress_enrollment "$2"
     ' "$script" "$script" "$target"
     [ "$status" -eq 0 ]
-    ! grep -q 'configuration[.]apple[.]com' "$target/private/etc/hosts"
+    run grep -q 'configuration[.]apple[.]com' "$target/private/etc/hosts"
+    [ "$status" -eq 1 ]
     grep -q '^127.0.0.1 localhost$' "$target/private/etc/hosts"
   done
 }
