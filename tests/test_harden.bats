@@ -20,3 +20,11 @@ setup() {
   run harden_status 2>/dev/null || true
   [ "$status" -eq 0 ]
 }
+
+@test "hardening keeps profile queries on stdout" {
+  local calls="$BATS_TEST_TMPDIR/profile-calls"
+  profiles() { printf '%s\n' "$*" > "$calls"; echo '<plist><array/></plist>'; }
+  run harden_live_os "$BATS_TEST_TMPDIR"
+  [ "$status" -eq 0 ]
+  [ "$(cat "$calls")" = '-C -output stdout-xml' ]
+}

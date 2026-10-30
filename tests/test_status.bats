@@ -49,7 +49,7 @@ teardown() {
   ' bash "$BATS_TEST_DIRNAME/.."
   [ "$status" -eq 0 ]
   [[ "$output" == *"Risk:"* ]]
-  [[ "$output" != *"integer expression expected"* ]]
+  [[ ! "$output" =~ integer.*expected ]]
 }
 
 @test "audit and report JSON contain numeric zero counts under nounset" {
