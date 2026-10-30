@@ -283,15 +283,19 @@ Unleash blocks via `/etc/hosts`:
 - `acmdm.apple.com` — Apple Configurator MDM
 - `axm-adm-mdm.apple.com` — ACM enrollment
 - `albert.apple.com` — ABM device assignment
-- `gdmf.apple.com` — MDM framework
-- `configuration.apple.com` — config service
+- `gdmf.apple.com` — software update catalog
 - `xp.apple.com` — device management
-- `gs.apple.com` — device enrollment
+- `gs.apple.com` — software updates
 - `tb.apple.com` — device trust
 - `vpp.itunes.apple.com` — volume purchase
 - Your org's MDM host (extracted from the DEP record)
 
 Both IPv4 (0.0.0.0) and IPv6 (::) entries are added.
+
+Some listed hosts also serve general Apple services. Blocking the software-update
+hosts can affect updates; this is distinct from a Wi-Fi radio failure.
+`configuration.apple.com`, used for Rosetta 2 updates, is no longer blocked.
+See [Apple's network requirements](https://support.apple.com/en-gb/101555).
 
 ### Layer 3: Launchd daemon override
 
@@ -464,17 +468,51 @@ Unleash checks for `/private/var/db/dslocal/nodes/Default` on the mounted volume
 
 ### macOS 27 and later
 
-macOS 27 has no recorded passing hardware validation in this project yet.
-Compatibility is tracked in [#22](https://github.com/mateussiqueira/unleash/issues/22).
-For a compatibility or Wi-Fi report, collect the build and interface state:
+[#22](https://github.com/mateussiqueira/unleash/issues/22) contains two positive
+community reports for macOS 27.2:
+
+- The [original reporter](https://github.com/mateussiqueira/unleash/issues/22#issuecomment-6522921874)
+  reports Unleash 2.0.0 working on an M1 Pro after upgrading an existing Sequoia
+  setup. This was not a fresh installation.
+- [Another user](https://github.com/mateussiqueira/unleash/issues/22#issuecomment-6520816615)
+  reports basic commands working on a MacBook Neo (Apple A18 Pro).
+
+These reports answer the original question but do not establish support for every
+build, command, or Recovery/FileVault scenario. Neither includes a complete test
+matrix. Shell regression tests are separate from hardware validation.
+
+### Wi-Fi on an external startup disk
+
+[#24](https://github.com/mateussiqueira/unleash/issues/24) remains under
+investigation. From the affected external installation, run:
 
 ```bash
 ./unleash doctor --network
 ```
 
-This reads the macOS build, Wi-Fi interface, power, and link status. Include
-the script commit, hardware model, and external SSD/hub connection when
-reporting an external-volume problem. It does not certify compatibility.
+This read-only command reports the macOS build, Wi-Fi interface, power, link, and
+IPv4 category without printing SSIDs, hardware addresses, or IP addresses.
+A failed query is reported separately from a successful query with no Wi-Fi port.
+
+- `Link status: inactive` concerns the interface link, before internet reachability.
+- `Wi-Fi IPv4: link-local` indicates a 169.254 address; `none` means no nonzero IPv4
+  address was reported. Neither result diagnoses IPv6 connectivity.
+- `Wi-Fi IPv4: configured` does not prove DNS or internet access.
+
+Include the script commit, Mac model, exact OS build, SSD/cable/hub connection,
+and whether Wi-Fi worked on that same external installation before running
+Unleash, if known. Working Wi-Fi on the internal installation alone does not
+isolate what changed on the external one.
+
+The `dualboot` code does not directly rewrite Wi-Fi preferences or toggle the
+radio. Tests preserve simulated network preferences, but do not reproduce macOS
+services reacting to account, enrollment, or boot changes.
+
+Apple documents [model-specific external installations](https://support.apple.com/en-eg/111336)
+and possible [USB 3/Thunderbolt 3 wireless interference](https://support.apple.com/en-us/102319).
+These are investigation leads, not confirmed causes of #24. If comparing startup
+disk cables or hubs, shut down before changing their connections; do not unplug
+the active startup disk.
 
 ### Monitor won't start
 Check if it's already running (`monitor-status`). Check permissions — it needs root. Check logs at `/var/log/unleash-monitor.log`.
@@ -483,8 +521,9 @@ Check if it's already running (`monitor-status`). Check permissions — it needs
 
 **What macOS versions are supported?**
 The existing targets are macOS 12–15 and 26. Validation depends on the command,
-OS build, and hardware; macOS 27 remains unverified. Shell regression tests
-do not replace testing Recovery, FileVault, and networking on the target Mac.
+OS build, and hardware. macOS 27.2 has the limited community reports described
+above; they do not replace testing Recovery, FileVault, and networking on the
+target Mac.
 
 **Do I need to disable SIP?**
 No. All writes target the Data volume.
