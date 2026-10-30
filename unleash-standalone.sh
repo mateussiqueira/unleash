@@ -459,7 +459,6 @@ suppress_enrollment() {
 		gdmf.apple.com
 		ax.init-content.apple.com
 		init-content.apple.com
-		configuration.apple.com
 		xp.apple.com
 		gs.apple.com
 		tb.apple.com
