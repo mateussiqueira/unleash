@@ -2856,6 +2856,9 @@ cmd_suppress() {
 }
 
 cmd_admin() {
+	if ! is_recovery; then
+		error_exit "Admin creation must run from Recovery mode."
+	fi
 	header "Create Local Admin User"
 	local data_mount
 	data_mount=$(resolve_data_volume)
