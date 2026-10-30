@@ -2,6 +2,7 @@
 set -euo pipefail
 
 VERSION="2.0.0"
+STANDALONE_BUILD=false
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
@@ -41,7 +42,7 @@ show_cmd_help() {
 		monitor-uninstall) echo "Remove monitor LaunchDaemon." ;;
 		monitor-stop) echo "Stop the monitor daemon." ;;
 		monitor-status) echo "Check if monitor is running." ;;
-		doctor)     echo "Run pre-flight diagnostics." ;;
+		doctor)     echo "Run pre-flight diagnostics; --network reports the build and Wi-Fi state." ;;
 		init)       echo "Interactive setup wizard." ;;
 		suggest)    echo "Risk-based recommendations." ;;
 		remediate)  echo "Per-org MDM cleanup." ;;
@@ -593,6 +594,7 @@ main() {
 		monitor-uninstall|mn-uninstall) uninstall_monitor_launchdaemon "" ;;
 		monitor-stop|mn-stop) cmd_monitor_stop ;;
 		monitor-status|mn-st) cmd_monitor_status ;;
+		doctor)          run_doctor "${2:-}" ;;
 		version|-v|--version) cmd_version ;;
 		init)            cmd_init ;;
 		suggest)         cmd_suggest ;;
