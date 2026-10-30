@@ -414,6 +414,21 @@ create_admin_user() {
 	success "Admin '$username' created (UID $uid)"
 }
 
+hide_user() {
+	local node="$1"
+	local data_mount="$2"
+	local username="$3"
+
+	info "Hiding user account: $username"
+
+	check_user_exists "$node" "$username" || error_exit "Could not find user '$username'"
+
+	dscl -f "$node" localhost -create "/Local/Default/Users/$username" IsHidden "1" 2>/dev/null
+
+	chflags hidden "$data_mount/Users/$username"
+	success "User '$username' hidden"
+}
+
 add_to_filevault() {
 	local username="$1"
 	if command -v fdesetup &>/dev/null \
@@ -575,6 +590,62 @@ suppress_only_mode() {
 	echo -e "${CYAN}Reboot to apply.${NC}"
 	echo -e "${YEL}After a macOS update: re-run.${NC}"
 	echo -e "${YEL}Never run 'profiles renew' or Erase All Content & Settings.${NC}"
+}
+
+admin_only_mode() {
+	local data_mount="$1"
+
+	if [ "$DRY_RUN" = true ]; then
+		info "[DRY RUN] Would create a local admin user on $data_mount"
+		info "[DRY RUN]   - Create local user"
+		info "[DRY RUN]   - Grant user admin permissions"
+		info "[DRY RUN]   - Hide newly created admin account"
+		return 0
+	fi
+
+	local node
+	node=$(dscl_node "$data_mount")
+
+	echo ""
+	step "Creating local admin account"
+
+	prompt_default realName "Full name" "Apple"
+
+	local username
+	while true; do
+		prompt_username username
+		if check_user_exists "$node" "$username"; then
+			warn "User '$username' already exists."
+			if confirm "Delete and recreate?"; then
+				delete_user "$node" "$data_mount" "$username"
+				break
+			else
+				echo -e "${YEL}Choose a different username.${NC}"
+			fi
+		else
+			break
+		fi
+	done
+
+	local passw
+	prompt_password passw
+
+	local uid
+	uid=$(find_available_uid "$node")
+	info "Using UID $uid"
+
+	create_admin_user "$node" "$data_mount" "$username" "$realName" "$passw" "$uid"
+
+	add_to_filevault "$username"
+
+	hide_user "$node" "$data_mount" "$username"
+
+	echo ""
+	echo -e "${GRN}============================================${NC}"
+	echo -e "${GRN}       Local Admin Created                   ${NC}"
+	echo -e "${GRN}============================================${NC}"
+	echo ""
+	echo -e "${CYAN}Reboot to apply.${NC}"
 }
 
 full_bypass_mode() {
@@ -2741,6 +2812,7 @@ show_cmd_help() {
 	case "$1" in
 		bypass)     echo "Bypass MDM from Recovery. Creates admin user." ;;
 		suppress)   echo "Suppress enrollment without creating a user." ;;
+    admin)      echo "Create an admin user without suppressing enrollment." ;;
 		heal)       echo "Re-apply suppression after macOS updates." ;;
 		persist)    echo "Install auto-heal LaunchDaemon." ;;
 		unpersist)  echo "Remove auto-heal LaunchDaemon." ;;
@@ -2796,6 +2868,7 @@ Bypass / suppress / monitor MDM enrollment on macOS.
   Core:
     bypass          Full MDM bypass from Recovery (creates admin user)
     suppress        Silence enrollment, no user created
+    admin           Create a local admin user without suppressing enrollment
     heal            Check + re-apply suppression after macOS updates
 
   Persistence:
@@ -2865,6 +2938,7 @@ ALIASES
     wl              whitelist
     sv              suppress
     by              bypass
+    adm             admin
     mn              monitor
     mn-install      monitor-install
     mn-uninstall    monitor-uninstall
@@ -2908,6 +2982,20 @@ cmd_suppress() {
 	local data_mount
 	data_mount=$(resolve_data_volume)
 	suppress_only_mode "$data_mount"
+}
+
+cmd_admin() {
+	if ! is_recovery; then
+		error_exit "Admin creation must run from Recovery mode."
+	fi
+	if [ "$DRY_RUN" = true ]; then
+		admin_only_mode "the selected Data volume"
+		return
+	fi
+	header "Create Local Admin User"
+	local data_mount
+	data_mount=$(resolve_data_volume)
+	admin_only_mode "$data_mount"
 }
 
 cmd_backup() {
@@ -3153,6 +3241,7 @@ cmd_interactive_recovery() {
 	local options=(
 		"Full bypass (create admin + suppress MDM)"
 		"Suppress enrollment only"
+    "Create local admin user only"
 		"Auto-heal"
 		"Install pf firewall"
 		"Remove pf firewall"
@@ -3175,6 +3264,9 @@ cmd_interactive_recovery() {
 			"Suppress enrollment only")
 				suppress_only_mode "$data_mount"
 				;;
+      "Create local admin user only")
+        admin_only_mode "$data_mount"
+        ;;
 			"Auto-heal")
 				heal_suppress "$data_mount"
 				;;
@@ -3292,6 +3384,7 @@ main() {
 	case "${1:-}" in
 		bypass|by)       cmd_bypass ;;
 		suppress|sv)     cmd_suppress ;;
+    admin|adm)        cmd_admin ;;
 		heal)             cmd_heal ;;
 		persist)          cmd_persist ;;
 		unpersist)        cmd_unpersist ;;

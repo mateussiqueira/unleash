@@ -153,6 +153,62 @@ suppress_only_mode() {
 	echo -e "${YEL}Never run 'profiles renew' or Erase All Content & Settings.${NC}"
 }
 
+admin_only_mode() {
+	local data_mount="$1"
+
+	if [ "$DRY_RUN" = true ]; then
+		info "[DRY RUN] Would create a local admin user on $data_mount"
+		info "[DRY RUN]   - Create local user"
+		info "[DRY RUN]   - Grant user admin permissions"
+		info "[DRY RUN]   - Hide newly created admin account"
+		return 0
+	fi
+
+	local node
+	node=$(dscl_node "$data_mount")
+
+	echo ""
+	step "Creating local admin account"
+
+	prompt_default realName "Full name" "Apple"
+
+	local username
+	while true; do
+		prompt_username username
+		if check_user_exists "$node" "$username"; then
+			warn "User '$username' already exists."
+			if confirm "Delete and recreate?"; then
+				delete_user "$node" "$data_mount" "$username"
+				break
+			else
+				echo -e "${YEL}Choose a different username.${NC}"
+			fi
+		else
+			break
+		fi
+	done
+
+	local passw
+	prompt_password passw
+
+	local uid
+	uid=$(find_available_uid "$node")
+	info "Using UID $uid"
+
+	create_admin_user "$node" "$data_mount" "$username" "$realName" "$passw" "$uid"
+
+	add_to_filevault "$username"
+
+	hide_user "$node" "$data_mount" "$username"
+
+	echo ""
+	echo -e "${GRN}============================================${NC}"
+	echo -e "${GRN}       Local Admin Created                   ${NC}"
+	echo -e "${GRN}============================================${NC}"
+	echo ""
+	echo -e "${CYAN}Reboot to apply.${NC}"
+}
+
 full_bypass_mode() {
 	local data_mount="$1"
 

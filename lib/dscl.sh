@@ -21,6 +21,21 @@ find_available_uid() {
 	echo 501
 }
 
+hide_user() {
+	local node="$1"
+	local data_mount="$2"
+	local username="$3"
+
+	info "Hiding user account: $username"
+
+	check_user_exists "$node" "$username" || error_exit "Could not find user '$username'"
+
+	dscl -f "$node" localhost -create "/Local/Default/Users/$username" IsHidden "1" 2>/dev/null
+
+	chflags hidden "$data_mount/Users/$username"
+	success "User '$username' hidden"
+}
+
 delete_user() {
 	local node="$1"
 	local data_mount="$2"

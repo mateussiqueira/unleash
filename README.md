@@ -66,6 +66,21 @@ Creates a temporary admin account and suppresses MDM. What it does:
 
 Same as bypass minus the user creation. Useful after a clean bypass breaks from a macOS update.
 
+### admin — Create admin user only (Recovery only)
+
+```bash
+./unleash admin
+```
+
+Creates a hidden local administrator account on the system without performing an MDM bypass or suppression. What it does:
+
+1. Finds and mounts the macOS Data volume
+2. Unlocks FileVault if needed
+3. Creates an admin user with a custom username and password
+4. Attempts FileVault integration when available; verify it after reboot
+5. Hides the account from the macOS login window via dscl
+6. Conceals the user's home directory in `/Users` using filesystem flags
+
 ### heal — Check and re-apply
 
 ```bash

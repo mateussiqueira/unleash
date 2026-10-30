@@ -22,6 +22,7 @@ show_cmd_help() {
 	case "$1" in
 		bypass)     echo "Bypass MDM from Recovery. Creates admin user." ;;
 		suppress)   echo "Suppress enrollment without creating a user." ;;
+		admin)      echo "Create an admin user without suppressing enrollment." ;;
 		heal)       echo "Re-apply suppression after macOS updates." ;;
 		persist)    echo "Install auto-heal LaunchDaemon." ;;
 		unpersist)  echo "Remove auto-heal LaunchDaemon." ;;
@@ -77,6 +78,7 @@ Bypass / suppress / monitor MDM enrollment on macOS.
   Core:
     bypass          Full MDM bypass from Recovery (creates admin user)
     suppress        Silence enrollment, no user created
+    admin           Create an admin user without suppressing enrollment
     heal            Check + re-apply suppression after macOS updates
 
   Persistence:
@@ -146,6 +148,7 @@ ALIASES
     wl              whitelist
     sv              suppress
     by              bypass
+    adm             admin
     mn              monitor
     mn-install      monitor-install
     mn-uninstall    monitor-uninstall
@@ -196,6 +199,20 @@ cmd_backup() {
 	local data_mount
 	data_mount=$(resolve_data_volume)
 	backup_state "$data_mount"
+}
+
+cmd_admin() {
+	if ! is_recovery; then
+		error_exit "Admin creation must run from Recovery mode."
+	fi
+	if [ "$DRY_RUN" = true ]; then
+		admin_only_mode "the selected Data volume"
+		return
+	fi
+	header "Create Local Admin User"
+	local data_mount
+	data_mount=$(resolve_data_volume)
+	admin_only_mode "$data_mount"
 }
 
 cmd_restore() {
@@ -434,6 +451,7 @@ cmd_interactive_recovery() {
 	local options=(
 		"Full bypass (create admin + suppress MDM)"
 		"Suppress enrollment only"
+		"Create local admin user only"
 		"Auto-heal"
 		"Install pf firewall"
 		"Remove pf firewall"
@@ -455,6 +473,9 @@ cmd_interactive_recovery() {
 				;;
 			"Suppress enrollment only")
 				suppress_only_mode "$data_mount"
+				;;
+			"Create local admin user only")
+				admin_only_mode "$data_mount"
 				;;
 			"Auto-heal")
 				heal_suppress "$data_mount"
@@ -573,6 +594,7 @@ main() {
 	case "${1:-}" in
 		bypass|by)       cmd_bypass ;;
 		suppress|sv)     cmd_suppress ;;
+		admin|adm)	      cmd_admin ;;
 		heal)             cmd_heal ;;
 		persist)          cmd_persist ;;
 		unpersist)        cmd_unpersist ;;
