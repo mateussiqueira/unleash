@@ -19,3 +19,9 @@ setup() {
   run run_preformat_check 2>/dev/null || true
   echo "$output" | grep -qiE "safe|mdm"
 }
+
+@test "pre-format checks handle zero profiles without arithmetic diagnostics" {
+  run run_preformat_check
+  [ "$status" -eq 0 ]
+  [[ ! "$output" =~ integer.*expected ]]
+}

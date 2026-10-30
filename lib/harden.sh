@@ -12,10 +12,13 @@ harden_live_os() {
 	step "Removing residual MDM profiles..."
 	if command -v profiles &>/dev/null; then
 		local installed
-		installed=$(profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+		installed=$(profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
 		if [ "$installed" -gt 0 ]; then
-			sudo profiles -D -F 2>/dev/null && success "Forced profile removal" \
-				|| warn "Profile removal failed"
+			if sudo profiles -D -F 2>/dev/null; then
+				success "Forced profile removal"
+			else
+				warn "Profile removal failed"
+			fi
 		else
 			info "No installed profiles to remove"
 		fi
@@ -24,8 +27,8 @@ harden_live_os() {
 	fi
 
 	step "Cleaning user LaunchAgents..."
-	local home
-	for home in /Users/*/; do
+	local home users_root="${1:-}/Users"
+	for home in "$users_root/"*/; do
 		[ -d "$home/Library/LaunchAgents" ] || continue
 		local cleaned=0
 		for agent in "$home/Library/LaunchAgents/"*; do
@@ -35,8 +38,11 @@ harden_live_os() {
 				cleaned=$((cleaned + 1))
 			fi
 		done
-		[ "$cleaned" -gt 0 ] && success "$(basename "$home"): removed $cleaned agent(s)" \
-			|| info "$(basename "$home"): clean"
+		if [ "$cleaned" -gt 0 ]; then
+			success "$(basename "$home"): removed $cleaned agent(s)"
+		else
+			info "$(basename "$home"): clean"
+		fi
 	done
 
 	step "Flushing DNS cache..."
@@ -70,9 +76,11 @@ harden_live_os() {
 
 	step "Disabling iCloud Private Relay (DoH source)..."
 	if command -v defaults &>/dev/null; then
-		sudo defaults write /Library/Preferences/com.apple.networkextensions.plist PrivateRelayEnabled -bool false 2>/dev/null \
-			&& success "Private Relay disabled" \
-			|| info "Private Relay not configurable (expected on some configs)"
+		if sudo defaults write /Library/Preferences/com.apple.networkextensions.plist PrivateRelayEnabled -bool false 2>/dev/null; then
+			success "Private Relay disabled"
+		else
+			info "Private Relay not configurable (expected on some configs)"
+		fi
 	fi
 
 	echo ""
@@ -96,5 +104,5 @@ harden_status() {
 	launchctl list 2>/dev/null | grep -iE "mdm|managed|enrollment|activation" || info "None loaded"
 
 	step "Running MDM processes..."
-	ps aux 2>/dev/null | grep -iE "mdm|managedclient|activation" | grep -v grep || info "None running"
+	pgrep -il "mdm|managedclient|activation" 2>/dev/null || info "None running"
 }

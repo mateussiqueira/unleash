@@ -2,11 +2,13 @@
 set -euo pipefail
 
 VERSION="2.0.0"
+STANDALONE_BUILD=false
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
 LIB_DIR="$SCRIPT_DIR/lib"
 
-for _lib in colors config detect validate dscl suppress backup status heal firewall harden whitelist check monitor history doctor selfupdate uninstall report ma_detect demo vpn init suggest remediate telemetry predict discord; do
+for _lib in colors config detect validate dscl suppress backup status launchd heal firewall harden whitelist check monitor history doctor selfupdate uninstall report ma_detect demo vpn init suggest remediate telemetry predict discord; do
 	_lib_path="$LIB_DIR/$_lib.sh"
 	if [ -f "$_lib_path" ]; then
 		source "$_lib_path"
@@ -41,7 +43,7 @@ show_cmd_help() {
 		monitor-uninstall) echo "Remove monitor LaunchDaemon." ;;
 		monitor-stop) echo "Stop the monitor daemon." ;;
 		monitor-status) echo "Check if monitor is running." ;;
-		doctor)     echo "Run pre-flight diagnostics." ;;
+		doctor)     echo "Run pre-flight diagnostics; --network reports the build and Wi-Fi state." ;;
 		init)       echo "Interactive setup wizard." ;;
 		suggest)    echo "Risk-based recommendations." ;;
 		remediate)  echo "Per-org MDM cleanup." ;;
@@ -215,6 +217,11 @@ cmd_restore() {
 }
 
 cmd_dualboot() {
+	if [ "$DRY_RUN" = true ]; then
+		info "[DRY RUN] Would select an external macOS installation and create an admin account."
+		info "[DRY RUN] Would update its hosts file and enrollment markers."
+		return 0
+	fi
 	if ! is_root; then
 		error_exit "Dual-boot needs sudo: sudo ./unleash dualboot"
 	fi
@@ -235,6 +242,7 @@ cmd_dualboot() {
 	echo ""
 	step "Creating admin account on target"
 
+	local realName
 	prompt_default realName "Full name" "Apple"
 	local username
 	prompt_username username
@@ -249,9 +257,7 @@ cmd_dualboot() {
 	begin "Blocking domains"
 	local hosts_file="$data_path/private/etc/hosts"
 	[ -f "$hosts_file" ] || touch "$hosts_file"
-	echo "0.0.0.0 deviceenrollment.apple.com" >>"$hosts_file"
-	echo "0.0.0.0 mdmenrollment.apple.com"    >>"$hosts_file"
-	echo "0.0.0.0 iprofiles.apple.com"        >>"$hosts_file"
+	printf '%s\n' "0.0.0.0 deviceenrollment.apple.com" "0.0.0.0 mdmenrollment.apple.com" "0.0.0.0 iprofiles.apple.com" >>"$hosts_file"
 	end_ok
 
 	begin "Resetting config profiles"
@@ -385,7 +391,9 @@ cmd_monitor() {
   while [ $# -gt 0 ]; do
     case "$1" in
       install|uninstall) args+=("$1"); shift ;;
-      --webhook) webhook="$2"; shift 2 ;;
+      --webhook)
+        if [ $# -lt 2 ] || [ -z "$2" ]; then error_exit "--webhook requires a URL"; fi
+        webhook="$2"; shift 2 ;;
       *) args+=("$1"); shift ;;
     esac
   done
@@ -549,22 +557,29 @@ cmd_interactive_normal() {
 }
 
 parse_global_opts() {
-	local args=()
+	PARSED_ARGS=()
 	while [ $# -gt 0 ]; do
 		case "$1" in
 			--verbose) VERBOSE=true; shift ;;
 			--dry-run) DRY_RUN=true; shift ;;
-			--log-file) LOG_FILE="$2"; shift 2 ;;
-			*) args+=("$1"); shift ;;
+			--log-file)
+				if [ $# -lt 2 ] || [ -z "$2" ]; then error_exit "--log-file requires a path"; fi
+				case "$2" in --*) error_exit "--log-file requires a path" ;; esac
+				LOG_FILE="$2"; shift 2 ;;
+			--) shift; PARSED_ARGS+=("$@"); break ;;
+			*) PARSED_ARGS+=("$1"); shift ;;
 		esac
 	done
-	set -- "${args[@]}"
-	echo "$@"
 }
 
 main() {
 	load_config
-	eval "set -- $(parse_global_opts "$@")"
+	parse_global_opts "$@"
+	if [ "${PARSED_ARGS[0]+present}" = present ]; then
+		set -- "${PARSED_ARGS[@]}"
+	else
+		set --
+	fi
 
 	# Per-command help
 	if [ "${2:-}" = "--help" ] || [ "${2:-}" = "-h" ]; then
@@ -582,7 +597,7 @@ main() {
 		firewall|fw)      cmd_firewall ;;
 		firewall-off|fw-off) cmd_firewall_off ;;
 		harden)           cmd_harden ;;
-		audit)            cmd_audit "$2" ;;
+		audit)            cmd_audit "${2:-}" ;;
 		whitelist|wl)     cmd_whitelist ;;
 		backup)           cmd_backup ;;
 		restore)          cmd_restore ;;
@@ -597,16 +612,17 @@ main() {
 		monitor-uninstall|mn-uninstall) uninstall_monitor_launchdaemon "" ;;
 		monitor-stop|mn-stop) cmd_monitor_stop ;;
 		monitor-status|mn-st) cmd_monitor_status ;;
+		doctor)          run_doctor "${2:-}" ;;
 		version|-v|--version) cmd_version ;;
 		init)            cmd_init ;;
 		suggest)         cmd_suggest ;;
-		remediate)       cmd_remediate "$2" ;;
-		predict)         cmd_predict "$2" ;;
-		telemetry)       telemetry_opt_in "$2" ;;
+		remediate)       cmd_remediate "${2:-}" ;;
+		predict)         cmd_predict "${2:-}" ;;
+		telemetry)       telemetry_opt_in "${2:-}" ;;
 		demo)             run_demo ;;
 		update)           do_self_update ;;
 		uninstall)        do_uninstall ;;
-		report)           generate_report "$2" ;;
+		report)           generate_report "${2:-}" ;;
 		config)           cmd_config "$@" ;;
 		vpn-kill)         vpn_kill_install "$@" ;;
 		vpn-kill-remove)  vpn_kill_remove ;;
@@ -618,7 +634,7 @@ main() {
 			install_monitor_launchdaemon ""
 			success "Reinstall complete"
 			;;
-		discord-bot)          cmd_discord_bot_install "$2" "$3" ;;
+		discord-bot)          cmd_discord_bot_install "${2:-}" "${3:-}" ;;
 		discord-bot-stop)     cmd_discord_bot_stop ;;
 		discord-bot-status)   cmd_discord_bot_status ;;
 		help|-h|--help)   show_help; exit 0 ;;

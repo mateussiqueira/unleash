@@ -9,10 +9,10 @@ cmd_discord_bot_install() {
   local token="${1:-}"
   local channel_id="${2:-}"
   if [ -z "$token" ]; then
-    read -p "Discord Bot Token: " token
+    read -r -p "Discord Bot Token: " token
   fi
   if [ -z "$channel_id" ]; then
-    read -p "Discord Channel ID: " channel_id
+    read -r -p "Discord Channel ID: " channel_id
   fi
   if [ -z "$token" ] || [ -z "$channel_id" ]; then
     error_exit "Token and channel ID are required"

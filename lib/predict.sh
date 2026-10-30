@@ -9,7 +9,7 @@ cmd_predict() {
     serial="${1:-}"
   fi
   if [ -z "$serial" ]; then
-    read -p "Enter serial number (or press Enter to skip): " serial
+    read -r -p "Enter serial number (or press Enter to skip): " serial
   fi
   if [ -z "$serial" ]; then
     info "No serial provided. Run: ./unleash predict <serial>"
@@ -33,7 +33,8 @@ H4C:School District Managed
 VMW:VMware Workspace ONE
 M5K:Addigy Managed
 W4P:Kandji Managed
-ORGS)
+ORGS
+  )
 
   local match
   match=$(echo "$known_orgs" | grep "^$serial_prefix:" || true)
@@ -49,6 +50,5 @@ ORGS)
     info "The device may be from a smaller org or not organizationally enrolled."
   fi
 
-  local check_url="https://billing.c.apple.com/check?sn=${serial}"
   info "For definitive ownership: https://checkcoverage.apple.com"
 }

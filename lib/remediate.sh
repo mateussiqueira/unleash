@@ -1,5 +1,4 @@
 
-CMD_SUGGEST=""
 
 known_orgs() {
   cat << 'ORGS'

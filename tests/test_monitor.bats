@@ -2,8 +2,10 @@
 
 setup() {
   load '../lib/colors.sh'
+  load '../lib/launchd.sh'
   load '../lib/monitor.sh'
   TEST_DIR=$(mktemp -d)
+  SCRIPT_PATH="$TEST_DIR/unleash"
 }
 
 teardown() {
@@ -11,12 +13,12 @@ teardown() {
 }
 
 @test "monitor_status exits cleanly when not running" {
-  run monitor_status 2>/dev/null || true
+  run monitor_status "$TEST_DIR/monitor.pid"
   [ "$status" -eq 0 ]
 }
 
 @test "stop_monitor exits cleanly when not running" {
-  run stop_monitor 2>/dev/null || true
+  run stop_monitor "$TEST_DIR/monitor.pid"
   [ "$status" -eq 0 ]
 }
 

@@ -35,3 +35,22 @@ teardown() {
   run grep -c "KEY=new" "$CONFIG_FILE"
   [ "$output" -eq 1 ]
 }
+
+@test "config preserves spaces and literal replacement characters" {
+  local value='/tmp/Unleash logs/quoted "name" & \tail'
+  save_config LOG_FILE old
+  save_config LOG_FILE "$value"
+  LOG_FILE=''
+  load_config
+  [ "$LOG_FILE" = "$value" ]
+}
+
+@test "config unset preserves other keys" {
+  save_config WEBHOOK 'https://example.com/a?x=1&y=2'
+  save_config LOG_LEVEL verbose
+  run cmd_config config unset LOG_LEVEL
+  [ "$status" -eq 0 ]
+  run grep -c '^LOG_LEVEL=' "$CONFIG_FILE"
+  [ "$status" -eq 1 ]
+  grep -q '^WEBHOOK=https://example.com/a?x=1&y=2$' "$CONFIG_FILE"
+}

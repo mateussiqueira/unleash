@@ -37,7 +37,8 @@ check_mdm_status() {
 		else
 			echo -e "  ${YEL}(none)${NC}"
 		fi
-		local count; count=$(echo "$matches" | grep -c . 2>/dev/null || echo 0)
+		local count; count=$(echo "$matches" | grep -c . 2>/dev/null || true)
+		count="${count:-0}"
 		echo -e "  ${CYAN}Total: $count of 13 expected domains blocked${NC}"
 	else
 		echo -e "  ${YEL}(hosts not found)${NC}"
@@ -79,6 +80,16 @@ check_mdm_status() {
 	fi
 }
 
+_mdm_agent_names() {
+	local agent
+	for agent in "$1/"*; do
+		[ -f "$agent" ] || continue
+		if printf '%s\n' "${agent##*/}" | grep -qiE 'mdm|enrollment|managed'; then
+			printf '%s\n' "${agent##*/}"
+		fi
+	done
+}
+
 deep_status() {
 	if [ "${1:-}" = "--json" ]; then
 		deep_status_json
@@ -89,10 +100,11 @@ deep_status() {
 	step "Installed Configuration Profiles"
 	if command -v profiles &>/dev/null; then
 		local profile_count
-		profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+		profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+		profile_count="${profile_count:-0}"
 		if [ "$profile_count" -gt 0 ]; then
 			warn "$profile_count profile(s) installed:"
-			sudo profiles -C -output=xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" | sed 's/.*<string>\(.*\)<\/string>.*/  - \1/'
+			sudo profiles -C -output stdout-xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" | sed 's/.*<string>\(.*\)<\/string>.*/  - \1/'
 		else
 			info "No configuration profiles installed"
 		fi
@@ -127,10 +139,10 @@ deep_status() {
 	for home in /Users/*/; do
 		[ -d "$home/Library/LaunchAgents" ] || continue
 		local user_agents
-		user_agents=$(ls "$home/Library/LaunchAgents/" 2>/dev/null | grep -iE "mdm|enrollment|managed" || true)
+		user_agents=$(_mdm_agent_names "$home/Library/LaunchAgents")
 		if [ -n "$user_agents" ]; then
 			echo -e "  ${YEL}$(basename "$home"):${NC}"
-			echo "$user_agents" | sed 's/^/    /'
+			while IFS= read -r agent; do printf '    %s\n' "$agent"; done <<< "$user_agents"
 			found=$((found + 1))
 		fi
 	done
@@ -139,9 +151,9 @@ deep_status() {
 
 	step "MDM LaunchDaemons (System)"
 	local sys_agents
-	sys_agents=$(ls /Library/LaunchDaemons/ 2>/dev/null | grep -iE "mdm|enrollment|managed" || true)
+	sys_agents=$(_mdm_agent_names /Library/LaunchDaemons)
 	if [ -n "$sys_agents" ]; then
-		echo "$sys_agents" | sed 's/^/  /'
+		while IFS= read -r agent; do printf '  %s\n' "$agent"; done <<< "$sys_agents"
 	else
 		info "No MDM LaunchDaemons found"
 	fi
@@ -149,9 +161,9 @@ deep_status() {
 
 	step "Running MDM Processes"
 	local procs
-	procs=$(ps aux 2>/dev/null | grep -iE "mdm|managedclient|activation" | grep -v grep || true)
+	procs=$(pgrep -il "mdm|managedclient|activation" 2>/dev/null || true)
 	if [ -n "$procs" ]; then
-		echo "$procs" | awk '{print "  " $11 " (PID " $2 ")"}'
+		echo "$procs" | awk '{print "  " $2 " (PID " $1 ")"}'
 	else
 		info "No MDM processes running"
 	fi
@@ -173,8 +185,12 @@ deep_status() {
 
 	step "Overall Assessment"
 	local risk="LOW"
-	[ "$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)" -gt 0 ] && risk="MEDIUM"
-	ps aux 2>/dev/null | grep -qiE "mdm|managedclient" && risk="HIGH"
+	local cfg="/private/var/db/ConfigurationProfiles/Settings"
+	local installed
+	installed=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+	installed="${installed:-0}"
+	[ "$installed" -gt 0 ] && risk="MEDIUM"
+	pgrep -i "mdm|managedclient" >/dev/null 2>&1 && risk="HIGH"
 	[ -f "$cfg/.cloudConfigRecordFound" ] && risk="CRITICAL"
 
 	case "$risk" in
@@ -193,7 +209,8 @@ deep_status_json() {
 
 	local profile_count=0
 	if command -v profiles &>/dev/null; then
-		profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+		profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+		profile_count="${profile_count:-0}"
 	fi
 	json="${json}  \"profile_count\": $profile_count,\n"
 
@@ -211,9 +228,7 @@ deep_status_json() {
 	json="${json}  \"mdm_certificates\": $mdm_certs,\n"
 
 	local running_procs=0
-	running_procs=$(ps aux 2>/dev/null | grep -ciE "mdm|managedclient|activation" || true)
-	running_procs=$((running_procs - 1))
-	[ "$running_procs" -lt 0 ] && running_procs=0
+	running_procs=$(pgrep -il "mdm|managedclient|activation" 2>/dev/null | awk 'END {print NR}' || true)
 	json="${json}  \"running_mdm_processes\": $running_procs,\n"
 
 	local risk="LOW"
