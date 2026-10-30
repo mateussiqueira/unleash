@@ -9,6 +9,7 @@ cat > "$OUT" << HEADER
 #!/bin/bash
 set -euo pipefail
 VERSION="$VERSION"
+STANDALONE_BUILD=true
 SCRIPT_DIR="\$(cd "\$(dirname "\$0")" && pwd)"
 SCRIPT_PATH="\$SCRIPT_DIR/\$(basename "\$0")"
 HEADER

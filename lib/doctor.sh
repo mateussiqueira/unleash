@@ -1,22 +1,59 @@
+_network_diagnostics() {
+  header "Network Diagnostics"
+  local version=unavailable build=unavailable
+  if command -v sw_vers &>/dev/null; then
+    version=$(sw_vers -productVersion 2>/dev/null) || version=unavailable
+    build=$(sw_vers -buildVersion 2>/dev/null) || build=unavailable
+  fi
+  printf 'macOS: %s (build %s)\n' "$version" "$build"
+  case "$version" in 27.*) warn "macOS 27 hardware compatibility remains unverified (issue #22)." ;; esac
+  local interface
+  interface=$(networksetup -listallhardwareports 2>/dev/null | awk '
+    /Hardware Port:/ { wifi=($0 ~ /: (Wi-Fi|AirPort)$/); next }
+    wifi && /^[[:space:]]*Device:/ { print $2; exit }
+  ' || true)
+  if [ -z "$interface" ]; then
+    info "No Wi-Fi hardware port reported."
+    return 0
+  fi
+  local power status
+  power=$(networksetup -getairportpower "$interface" 2>/dev/null || true)
+  case "$power" in *': On') power=on ;; *': Off') power=off ;; *) power=unavailable ;; esac
+  status=$(ifconfig "$interface" 2>/dev/null | awk '/^[[:space:]]*status:/ {print $2; exit}' || true)
+  printf 'Wi-Fi interface: %s\nWi-Fi power: %s\nLink status: %s\n' "$interface" "$power" "${status:-unavailable}"
+}
+
 run_doctor() {
+  if [ "${1:-}" = --network ]; then _network_diagnostics; return; fi
   header "Unleash Doctor — Pre-Flight Check"
 
   local errors=0 warnings=0
 
   begin "Script location"
-  if [ -n "$SCRIPT_DIR" ] && [ -d "$SCRIPT_DIR" ]; then
-    end_ok; echo "     $SCRIPT_DIR"
+  local script_dir="${SCRIPT_DIR:-}"
+  if [ -n "$script_dir" ] && [ -d "$script_dir" ]; then
+    end_ok; echo "     $script_dir"
   else
     end_fail; errors=$((errors + 1))
   fi
 
   begin "Library files"
   local missing=0
-  for _lib in colors detect validate dscl suppress backup status heal firewall harden whitelist check monitor history; do
-    [ -f "$LIB_DIR/$_lib.sh" ] || missing=$((missing + 1))
-  done
+  if [ "${STANDALONE_BUILD:-false}" = true ]; then
+    local core
+    for core in log resolve_data_volume validate_username create_admin_user suppress_enrollment backup_state deep_status _launchd_script_path heal_suppress install_pf_mdm_block harden_live_os install_selective_block run_preformat_check monitor_mdm show_history; do
+      declare -F "$core" >/dev/null || missing=$((missing + 1))
+    done
+  else
+    local lib_dir="${LIB_DIR:-}"
+    for _lib in colors detect validate dscl suppress backup status launchd heal firewall harden whitelist check monitor history; do
+      [ -n "$lib_dir" ] && [ -f "$lib_dir/$_lib.sh" ] || missing=$((missing + 1))
+    done
+  fi
   if [ "$missing" -eq 0 ]; then
-    end_ok; echo "     13/13 modules loaded"
+    end_ok
+    if [ "${STANDALONE_BUILD:-false}" = true ]; then echo "     Embedded core modules loaded";
+    else echo "     Core library files available"; fi
   else
     end_fail; echo "     $missing module(s) missing"; errors=$((errors + 1))
   fi
@@ -38,8 +75,6 @@ run_doctor() {
   fi
 
   begin "Disk space (Data volume)"
-  local mount_pt
-  mount_pt=$(df / 2>/dev/null | awk 'NR>1 {print $NF; exit}')
   local avail
   avail=$(df / 2>/dev/null | awk 'NR>1 {print $4; exit}')
   if [ -n "$avail" ] && [ "$avail" -gt 1048576 ]; then
