@@ -745,7 +745,8 @@ check_mdm_status() {
 		else
 			echo -e "  ${YEL}(none)${NC}"
 		fi
-		local count; count=$(echo "$matches" | grep -c . 2>/dev/null || echo 0)
+		local count; count=$(echo "$matches" | grep -c . 2>/dev/null || true)
+		count="${count:-0}"
 		echo -e "  ${CYAN}Total: $count of 13 expected domains blocked${NC}"
 	else
 		echo -e "  ${YEL}(hosts not found)${NC}"
@@ -807,10 +808,11 @@ deep_status() {
 	step "Installed Configuration Profiles"
 	if command -v profiles &>/dev/null; then
 		local profile_count
-		profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+		profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+		profile_count="${profile_count:-0}"
 		if [ "$profile_count" -gt 0 ]; then
 			warn "$profile_count profile(s) installed:"
-			sudo profiles -C -output=xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" | sed 's/.*<string>\(.*\)<\/string>.*/  - \1/'
+			sudo profiles -C -output stdout-xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" | sed 's/.*<string>\(.*\)<\/string>.*/  - \1/'
 		else
 			info "No configuration profiles installed"
 		fi
@@ -891,7 +893,11 @@ deep_status() {
 
 	step "Overall Assessment"
 	local risk="LOW"
-	[ "$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)" -gt 0 ] && risk="MEDIUM"
+	local cfg="/private/var/db/ConfigurationProfiles/Settings"
+	local installed
+	installed=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+	installed="${installed:-0}"
+	[ "$installed" -gt 0 ] && risk="MEDIUM"
 	pgrep -i "mdm|managedclient" >/dev/null 2>&1 && risk="HIGH"
 	[ -f "$cfg/.cloudConfigRecordFound" ] && risk="CRITICAL"
 
@@ -911,7 +917,8 @@ deep_status_json() {
 
 	local profile_count=0
 	if command -v profiles &>/dev/null; then
-		profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+		profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+		profile_count="${profile_count:-0}"
 	fi
 	json="${json}  \"profile_count\": $profile_count,\n"
 
@@ -2156,10 +2163,11 @@ generate_report() {
   step "Installed Profiles"
   if command -v profiles &>/dev/null; then
     local count
-    count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+    count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+    count="${count:-0}"
     if [ "$count" -gt 0 ]; then
       echo "  $count profile(s) installed"
-      sudo profiles -C -output=xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" \
+      sudo profiles -C -output stdout-xml 2>/dev/null | grep -A1 "ProfileDisplayName" | grep "<string>" \
         | sed 's/.*<string>\(.*\)<\/string>.*/    - \1/'
     else
       echo "  No profiles installed"
@@ -2204,7 +2212,8 @@ generate_report() {
   step "Hosts Block"
   if grep -q "iprofiles.apple.com" /private/etc/hosts 2>/dev/null; then
     local blocked
-    blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || echo 0)
+    blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || true)
+    blocked="${blocked:-0}"
     echo "  $blocked domain(s) blocked in /etc/hosts"
   else
     echo "  No block entries found"
@@ -2243,7 +2252,8 @@ generate_report_json() {
 
   local profile_count=0
   if command -v profiles &>/dev/null; then
-    profile_count=$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)
+    profile_count=$(sudo profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+    profile_count="${profile_count:-0}"
   fi
   report="${report}  \"installed_profiles\": $profile_count,\n"
 
@@ -2273,7 +2283,8 @@ generate_report_json() {
   report="${report}  },\n"
 
   local hosts_blocked=0
-  hosts_blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || echo 0)
+  hosts_blocked=$(grep -c "0.0.0.0" /private/etc/hosts 2>/dev/null || true)
+  hosts_blocked="${hosts_blocked:-0}"
   report="${report}  \"hosts_blocked\": $hosts_blocked\n"
 
   report="${report}}"
