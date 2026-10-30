@@ -8,6 +8,10 @@ heal_suppress() {
 	local hosts="${data_mount}/private/etc/hosts"
 	local ldp="${data_mount}/private/var/db/com.apple.xpc.launchd/disabled.plist"
 
+	if [ "$DRY_RUN" != true ] && [ -f "$hosts" ]; then
+		_restore_rosetta_hosts "$hosts" || error_exit "Could not repair old Rosetta hosts blocks."
+	fi
+
 	local needs_heal=false
 
 	if [ -f "$cfg/.cloudConfigRecordFound" ]; then

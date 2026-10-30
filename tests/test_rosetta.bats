@@ -2,12 +2,42 @@
 
 suppress_fixture() {
   local script="$1" target="$2"
+  local action="${3:-suppress_enrollment}" simulation="${4:-false}"
   run bash -u -c '
     source <(sed '\''/^main "\$@"$/d'\'' "$1")
-    PB=:
-    suppress_enrollment "$2"
-  ' "$script" "$script" "$target"
+    DRY_RUN="$4"
+    "$3" "$2"
+  ' "$script" "$script" "$target" "$action" "$simulation"
   [ "$status" -eq 0 ]
+}
+
+@test "heal repairs old Rosetta blocks even when suppression is otherwise intact" {
+  local entrypoint
+  for entrypoint in unleash unleash-standalone.sh; do
+    local script="$BATS_TEST_DIRNAME/../$entrypoint"
+    local target="$BATS_TEST_TMPDIR/$entrypoint" hosts
+    hosts="$target/private/etc/hosts"
+    suppress_fixture "$script" "$target"
+    printf '0.0.0.0 configuration.apple.com\n::      configuration.apple.com\n' >> "$hosts"
+    suppress_fixture "$script" "$target" heal_suppress
+    run grep -q 'configuration[.]apple[.]com' "$hosts"
+    [ "$status" -eq 1 ]
+  done
+}
+
+@test "heal dry run preserves old Rosetta entries" {
+  local entrypoint
+  for entrypoint in unleash unleash-standalone.sh; do
+    local script="$BATS_TEST_DIRNAME/../$entrypoint"
+    local target="$BATS_TEST_TMPDIR/$entrypoint" hosts
+    hosts="$target/private/etc/hosts"
+    suppress_fixture "$script" "$target"
+    printf '0.0.0.0 configuration.apple.com\n::      configuration.apple.com\n' >> "$hosts"
+    cp "$hosts" "$target/original"
+    suppress_fixture "$script" "$target" heal_suppress true
+    cmp "$target/original" "$hosts"
+    [ ! -e "$hosts.unleash-rosetta.bak" ]
+  done
 }
 
 @test "suppression does not add hosts blocks for Rosetta configuration" {
