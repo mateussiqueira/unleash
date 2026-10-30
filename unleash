@@ -222,6 +222,7 @@ cmd_dualboot() {
 	echo ""
 	step "Creating admin account on target"
 
+	local realName
 	prompt_default realName "Full name" "Apple"
 	local username
 	prompt_username username
@@ -236,9 +237,7 @@ cmd_dualboot() {
 	begin "Blocking domains"
 	local hosts_file="$data_path/private/etc/hosts"
 	[ -f "$hosts_file" ] || touch "$hosts_file"
-	echo "0.0.0.0 deviceenrollment.apple.com" >>"$hosts_file"
-	echo "0.0.0.0 mdmenrollment.apple.com"    >>"$hosts_file"
-	echo "0.0.0.0 iprofiles.apple.com"        >>"$hosts_file"
+	printf '%s\n' "0.0.0.0 deviceenrollment.apple.com" "0.0.0.0 mdmenrollment.apple.com" "0.0.0.0 iprofiles.apple.com" >>"$hosts_file"
 	end_ok
 
 	begin "Resetting config profiles"

@@ -87,9 +87,9 @@ generate_report() {
 
   step "Running MDM Processes"
   local procs
-  procs=$(ps aux 2>/dev/null | grep -iE "mdm|managedclient|activation" | grep -v grep || true)
+  procs=$(pgrep -il "mdm|managedclient|activation" 2>/dev/null || true)
   if [ -n "$procs" ]; then
-    echo "$procs" | awk '{print "  " $11 " (PID " $2 ")"}'
+    echo "$procs" | awk '{print "  " $2 " (PID " $1 ")"}'
   else
     echo "  None"
   fi

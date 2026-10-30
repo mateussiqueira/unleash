@@ -117,9 +117,11 @@ install_persist_launchdaemon() {
 
 	step "Loading LaunchDaemon..."
 	if command -v launchctl &>/dev/null; then
-		launchctl load "$plist_path" 2>/dev/null \
-			&& success "LaunchDaemon loaded (will run on next boot)" \
-			|| info "LaunchDaemon will load on next boot"
+		if launchctl load "$plist_path" 2>/dev/null; then
+			success "LaunchDaemon loaded (will run on next boot)"
+		else
+			info "LaunchDaemon will load on next boot"
+		fi
 	else
 		info "launchctl not available (expected in Recovery) — will load on next boot"
 	fi

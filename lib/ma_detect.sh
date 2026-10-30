@@ -1,3 +1,11 @@
+_has_matching_path() {
+  local path
+  for path in "$@"; do
+    [ ! -e "$path" ] || return 0
+  done
+  return 1
+}
+
 detect_configurator_enrollment() {
   local data_mount="${1:-}"
 
@@ -80,8 +88,13 @@ detect_migration_assistant() {
 
     local user_agents="$home/Library/LaunchAgents"
     if [ -d "$user_agents" ]; then
-      local found
-      found=$(ls "$user_agents" 2>/dev/null | grep -ciE "mdm|enrollment|managed" || true)
+      local found=0 agent
+      for agent in "$user_agents/"*; do
+        [ -f "$agent" ] || continue
+        if printf '%s\n' "${agent##*/}" | grep -qiE 'mdm|enrollment|managed'; then
+          found=$((found + 1))
+        fi
+      done
       if [ "$found" -gt 0 ]; then
         ma_indicators=$((ma_indicators + found))
         details="$details  $user: $found MDM LaunchAgent(s)\n"
@@ -90,9 +103,7 @@ detect_migration_assistant() {
 
     local prefs="$home/Library/Preferences"
     if [ -d "$prefs" ]; then
-      local mdm_prefs
-      mdm_prefs=$(ls "$prefs"/com.apple.mdm* "$prefs"/com.apple.ManagedClient* 2>/dev/null | head -3 || true)
-      if [ -n "$mdm_prefs" ]; then
+      if _has_matching_path "$prefs"/com.apple.mdm* "$prefs"/com.apple.ManagedClient*; then
         ma_indicators=$((ma_indicators + 1))
         details="$details  $user: MDM preference files\n"
       fi
@@ -106,16 +117,12 @@ detect_migration_assistant() {
 
     local caches="$home/Library/Caches"
     if [ -d "$caches" ]; then
-      local enrollment_cache
-      enrollment_cache=$(ls "$caches"/com.apple.enrollment* 2>/dev/null | head -3 || true)
-      if [ -n "$enrollment_cache" ]; then
+      if _has_matching_path "$caches"/com.apple.enrollment*; then
         ma_indicators=$((ma_indicators + 1))
         details="$details  $user: enrollment cache files\n"
       fi
 
-      local mdmd_cache
-      mdmd_cache=$(ls "$caches"/com.apple.mdm* 2>/dev/null | head -3 || true)
-      if [ -n "$mdmd_cache" ]; then
+      if _has_matching_path "$caches"/com.apple.mdm*; then
         ma_indicators=$((ma_indicators + 1))
         details="$details  $user: MDM cache files\n"
       fi

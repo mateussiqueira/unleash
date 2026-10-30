@@ -475,6 +475,9 @@ MA copies user-level caches, preferences, and launch agents. Unleash handles thi
 
 ## Contributing
 
+Run `make ci` with Bash, Python 3.9+, ShellCheck, and Bats (validated with Bats 1.12).
+The test suite uses temporary volumes and inert macOS command fixtures; it does not validate behavior on real Mac hardware.
+
 See CONTRIBUTING.md. PRs welcome, especially for:
 
 - New macOS version compatibility

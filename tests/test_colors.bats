@@ -39,3 +39,10 @@ teardown() {
   [ "$status" -eq 0 ]
   echo "$output" | grep -q "Test Title"
 }
+
+@test "header draws a valid Unicode border for the title width" {
+  run header Mac
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"╔═══════╗"* ]]
+  [[ "$output" == *"╚═══════╝"* ]]
+}

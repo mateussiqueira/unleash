@@ -26,3 +26,16 @@ teardown() {
   run deep_status_json 2>/dev/null || true
   echo "$output" | grep -q "}"
 }
+
+@test "deep_status_json counts a single matching process without subtracting it" {
+  profiles() {
+    if [ "$1" = -C ]; then echo '<key>ProfileDisplayName</key>';
+    else echo 'MDM enrollment: No'; fi
+  }
+  sudo() { "$@"; }
+  pgrep() { echo '42 mdmclient'; }
+  ps() { echo 'test 42 0.0 0.0 1 1 ? S 00:00 0:00 mdmclient'; }
+  run deep_status_json
+  [ "$status" -eq 0 ]
+  echo "$output" | python3 -c 'import json,sys; assert json.load(sys.stdin)["running_mdm_processes"] == 1'
+}

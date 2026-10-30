@@ -32,7 +32,8 @@ resolve_data_volume() {
 		warn "Auto-detection failed. Available disks:"
 		diskutil list >&2
 		echo ""
-		read -p "Enter Data volume identifier (e.g. disk3s1): " id </dev/tty
+		[ -t 0 ] || error_exit "Cannot select a Data volume without a terminal."
+		read -r -p "Enter Data volume identifier (e.g. disk3s1): " id </dev/tty
 		id="${id#/dev/}"
 	fi
 
@@ -87,9 +88,9 @@ detect_system_volume() {
 resolve_target_volumes() {
 	local base_name data_name
 
-	read -p "Enter target system volume name (default 'Macintosh HD'): " base_name
+	read -r -p "Enter target system volume name (default 'Macintosh HD'): " base_name
 	base_name="${base_name:=Macintosh HD}"
-	read -p "Enter target data volume name (default 'Macintosh HD - Data'): " data_name
+	read -r -p "Enter target data volume name (default 'Macintosh HD - Data'): " data_name
 	data_name="${data_name:=Macintosh HD - Data}"
 
 	local sys_path="/Volumes/$base_name"
