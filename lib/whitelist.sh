@@ -11,7 +11,7 @@ install_selective_block() {
   local anchor_file="${anchor_dir}/com.unleash.selective"
   mkdir -p "$anchor_dir"
 
-  > "$anchor_file"
+  : > "$anchor_file"
 
   for d in $MDM_BLOCKLIST; do
     for ip in $(host -t a "$d" 2>/dev/null | awk '/has address/{print $NF}'); do
@@ -33,10 +33,7 @@ install_selective_block() {
     if grep -q "com.unleash.selective" "$pf_conf" 2>/dev/null; then
       info "pf.conf already has selective anchor"
     else
-      echo "" >> "$pf_conf"
-      echo "# Added by unleash — selective MDM block (iCloud-safe)" >> "$pf_conf"
-      echo "$anchor_line" >> "$pf_conf"
-      echo "$load_line" >> "$pf_conf"
+      printf '\n%s\n%s\n%s\n' "# Added by unleash — selective MDM block (iCloud-safe)" "$anchor_line" "$load_line" >> "$pf_conf"
       success "pf.conf updated with selective rules"
     fi
   else
@@ -56,8 +53,11 @@ EOF
   fi
 
   if command -v pfctl &>/dev/null; then
-    pfctl -e -f "$pf_conf" 2>/dev/null && success "pf rules loaded (iCloud should work)" \
-      || warn "pfctl failed"
+    if pfctl -e -f "$pf_conf" 2>/dev/null; then
+      success "pf rules loaded (iCloud should work)"
+    else
+      warn "pfctl failed"
+    fi
   fi
 }
 

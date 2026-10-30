@@ -7,7 +7,8 @@ pf_backup_anchor() {
 	local root="$1"
 	local anchor_file="${root}${FIREWALL_ANCHOR_DIR}/${FIREWALL_ANCHOR}"
 	[ ! -f "$anchor_file" ] && return 0
-	local backup="${anchor_file}.backup.$(date +%s)"
+	local backup
+	backup="${anchor_file}.backup.$(date +%s)"
 	cp "$anchor_file" "$backup" && info "Backed up pf anchor: $backup"
 }
 
@@ -15,7 +16,8 @@ pf_backup_conf() {
 	local root="$1"
 	local pf_conf="${root}${FIREWALL_CONF}"
 	[ ! -f "$pf_conf" ] && return 0
-	local backup="${pf_conf}.backup.$(date +%s)"
+	local backup
+	backup="${pf_conf}.backup.$(date +%s)"
 	cp "$pf_conf" "$backup" && info "Backed up pf.conf: $backup"
 }
 
@@ -51,10 +53,7 @@ ANCHOR
 		if grep -q "com.unleash" "$pf_conf" 2>/dev/null; then
 			info "pf.conf already has Unleash anchor"
 		else
-			echo "" >> "$pf_conf"
-			echo "# Added by unleash — MDM block" >> "$pf_conf"
-			echo "$anchor_line" >> "$pf_conf"
-			echo "$load_line" >> "$pf_conf"
+			printf '\n%s\n%s\n%s\n' "# Added by unleash — MDM block" "$anchor_line" "$load_line" >> "$pf_conf"
 			success "pf.conf updated"
 		fi
 	else
@@ -79,8 +78,11 @@ ANCHOR
 
 	step "Loading pf rules..."
 	if command -v pfctl &>/dev/null; then
-		pfctl -e -f "$pf_conf" 2>/dev/null && success "pf enabled and rules loaded" \
-			|| warn "pfctl failed — try: sudo pfctl -e -f $pf_conf"
+		if pfctl -e -f "$pf_conf" 2>/dev/null; then
+			success "pf enabled and rules loaded"
+		else
+			warn "pfctl failed — try: sudo pfctl -e -f $pf_conf"
+		fi
 	else
 		warn "pfctl not available"
 	fi
@@ -105,8 +107,14 @@ remove_pf_mdm_block() {
 
 	local pf_conf="${root}${FIREWALL_CONF}"
 	if [ -f "$pf_conf" ]; then
-		sed -i '' '/# Added by unleash/d' "$pf_conf" 2>/dev/null || true
-		sed -i '' '/com\.unleash/d' "$pf_conf" 2>/dev/null || true
+		local tmp_conf
+		tmp_conf=$(mktemp "${pf_conf}.XXXXXX") || return 1
+		if ! cp -p "$pf_conf" "$tmp_conf" \
+			|| ! sed '/# Added by unleash/d; /com\.unleash/d' "$pf_conf" > "$tmp_conf" \
+			|| ! mv "$tmp_conf" "$pf_conf"; then
+			rm -f "$tmp_conf"
+			return 1
+		fi
 		success "pf.conf cleaned"
 	fi
 
@@ -124,9 +132,11 @@ pf_status() {
 	if command -v pfctl &>/dev/null; then
 		pfctl -si 2>/dev/null | grep -E "Status|Enabled" || echo "  pf not enabled"
 		echo ""
-		pfctl -a "$FIREWALL_ANCHOR" -s rules 2>/dev/null \
-			&& info "Unleash MDM anchor rules:" \
-			|| info "No Unleash MDM anchor loaded"
+		if pfctl -a "$FIREWALL_ANCHOR" -s rules 2>/dev/null; then
+			info "Unleash MDM anchor rules:"
+		else
+			info "No Unleash MDM anchor loaded"
+		fi
 	else
 		warn "pfctl not available"
 	fi

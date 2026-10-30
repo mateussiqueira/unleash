@@ -70,11 +70,7 @@ install_persist_launchdaemon() {
 	root="$(_persist_mount_root "$data_mount")"
 
 	local unleash_src
-	if [ -n "$SCRIPT_DIR" ]; then
-		unleash_src="$SCRIPT_DIR/unleash"
-	else
-		unleash_src="$(cd "$(dirname "$0")" && pwd)/unleash"
-	fi
+	unleash_src=$(_launchd_script_path)
 
 	step "Installing LaunchDaemon for boot-time persistence..."
 
@@ -93,8 +89,8 @@ install_persist_launchdaemon() {
 		<key>ProgramArguments</key>
 		<array>
 			<string>/bin/bash</string>
-			<string>-c</string>
-			<string>${unleash_src} heal</string>
+			<string>${unleash_src}</string>
+			<string>heal</string>
 		</array>
 		<key>RunAtLoad</key>
 		<true/>
@@ -117,9 +113,11 @@ install_persist_launchdaemon() {
 
 	step "Loading LaunchDaemon..."
 	if command -v launchctl &>/dev/null; then
-		launchctl load "$plist_path" 2>/dev/null \
-			&& success "LaunchDaemon loaded (will run on next boot)" \
-			|| info "LaunchDaemon will load on next boot"
+		if launchctl load "$plist_path" 2>/dev/null; then
+			success "LaunchDaemon loaded (will run on next boot)"
+		else
+			info "LaunchDaemon will load on next boot"
+		fi
 	else
 		info "launchctl not available (expected in Recovery) — will load on next boot"
 	fi
