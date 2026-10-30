@@ -395,6 +395,14 @@ create_admin_user() {
 	local password="$5"
 	local uid="$6"
 
+	local user_home="$data_mount/Users/$username"
+	if check_user_exists "$node" "$username"; then
+		error_exit "User '$username' already exists; choose a new username."
+	fi
+	if [ -e "$user_home" ] || [ -L "$user_home" ]; then
+		error_exit "Home already exists: $user_home; choose a new username."
+	fi
+
 	info "Creating admin account: $username"
 
 	dscl -f "$node" localhost -create "/Local/Default/Users/$username" 2>/dev/null \
@@ -410,7 +418,8 @@ create_admin_user() {
 	dscl -f "$node" localhost -append "/Local/Default/Groups/admin" GroupMembership "$username" 2>/dev/null \
 		|| error_exit "Failed to grant admin"
 
-	mkdir -p "$data_mount/Users/$username"
+	mkdir -p "$user_home" || error_exit "Failed to create home directory"
+	chown "$uid:20" "$user_home" || error_exit "Failed to assign home ownership"
 	success "Admin '$username' created (UID $uid)"
 }
 
