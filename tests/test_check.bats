@@ -23,5 +23,5 @@ setup() {
 @test "pre-format checks handle zero profiles without arithmetic diagnostics" {
   run run_preformat_check
   [ "$status" -eq 0 ]
-  [[ "$output" != *"integer expression expected"* ]]
+  [[ ! "$output" =~ integer.*expected ]]
 }
