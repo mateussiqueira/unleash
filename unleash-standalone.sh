@@ -71,7 +71,8 @@ header() {
   local title="$1"
   local len="${#title}"
   local line
-  line=$(printf '%*s' "$((len + 4))" | tr ' ' '═')
+  line=$(printf '%*s' "$((len + 4))" '')
+  line="${line// /═}"
   echo ""
   echo -e "${CYAN}╔${line}╗${NC}"
   echo -e "${CYAN}║  ${title}  ║${NC}"
@@ -110,7 +111,7 @@ prompt_default() {
   local prompt_text="$2"
   local default="$3"
   local value
-  read -p "${CYAN}${prompt_text}${NC} (default '${default}'): " value
+  read -r -p "${CYAN}${prompt_text}${NC} (default '${default}'): " value
   value="${value:=$default}"
   eval "$var_name=\"$value\""
 }
@@ -118,7 +119,7 @@ prompt_default() {
 confirm() {
   local prompt="$1"
   local response
-  read -p "${prompt} (y/N): " response
+  read -r -p "${prompt} (y/N): " response
   [[ "$response" =~ ^[Yy]$ ]]
 }
 
@@ -126,10 +127,9 @@ CONFIG_FILE="$HOME/.unleash.conf"
 
 load_config() {
   [ -f "$CONFIG_FILE" ] || return 0
-
-  while IFS='=' read -r key value; do
+  local key value
+  while IFS='=' read -r key value || [ -n "$key" ]; do
     key="${key// /}"
-    value="${value// /}"
     [ -z "$key" ] && continue
     case "$key" in
       WEBHOOK) DISCORD_WEBHOOK="$value" ;;
@@ -139,18 +139,29 @@ load_config() {
   done < "$CONFIG_FILE"
 }
 
-save_config() {
+_rewrite_config() {
   local key="$1"
   local value="$2"
   local tmp
-
   [ -f "$CONFIG_FILE" ] || touch "$CONFIG_FILE"
-
-  if grep -q "^${key}=" "$CONFIG_FILE" 2>/dev/null; then
-    sed -i '' "s/^${key}=.*/${key}=${value}/" "$CONFIG_FILE"
-  else
-    echo "${key}=${value}" >> "$CONFIG_FILE"
+  tmp=$(mktemp "${CONFIG_FILE}.XXXXXX") || return 1
+  if ! UNLEASH_CONFIG_KEY="$key" UNLEASH_CONFIG_VALUE="$value" \
+    UNLEASH_CONFIG_OPERATION="${3:-set}" awk '
+      BEGIN { key=ENVIRON["UNLEASH_CONFIG_KEY"]; value=ENVIRON["UNLEASH_CONFIG_VALUE"];
+              operation=ENVIRON["UNLEASH_CONFIG_OPERATION"] }
+      index($0, key "=")==1 { if (!found++ && operation=="set") print key "=" value; next }
+      { print }
+      END { if (!found && operation=="set") print key "=" value }
+    ' "$CONFIG_FILE" > "$tmp"; then
+    rm -f "$tmp"
+    return 1
   fi
+  mv "$tmp" "$CONFIG_FILE"
+}
+
+save_config() {
+  local key="$1" value="$2"
+  _rewrite_config "$key" "$value" || return 1
   success "Saved $key to $CONFIG_FILE"
 }
 
@@ -180,7 +191,7 @@ cmd_config() {
       local key="$3"
       [ -z "$key" ] && { info "Usage: ./unleash config unset KEY"; return 1; }
       if [ -f "$CONFIG_FILE" ]; then
-        sed -i '' "/^${key}=/d" "$CONFIG_FILE"
+        _rewrite_config "$key" "" unset || return 1
         success "Removed $key from config"
       fi
       ;;
@@ -224,7 +235,8 @@ resolve_data_volume() {
 		warn "Auto-detection failed. Available disks:"
 		diskutil list >&2
 		echo ""
-		read -p "Enter Data volume identifier (e.g. disk3s1): " id </dev/tty
+		[ -t 0 ] || error_exit "Cannot select a Data volume without a terminal."
+		read -r -p "Enter Data volume identifier (e.g. disk3s1): " id </dev/tty
 		id="${id#/dev/}"
 	fi
 
@@ -279,9 +291,9 @@ detect_system_volume() {
 resolve_target_volumes() {
 	local base_name data_name
 
-	read -p "Enter target system volume name (default 'Macintosh HD'): " base_name
+	read -r -p "Enter target system volume name (default 'Macintosh HD'): " base_name
 	base_name="${base_name:=Macintosh HD}"
-	read -p "Enter target data volume name (default 'Macintosh HD - Data'): " data_name
+	read -r -p "Enter target data volume name (default 'Macintosh HD - Data'): " data_name
 	data_name="${data_name:=Macintosh HD - Data}"
 
 	local sys_path="/Volumes/$base_name"
@@ -315,7 +327,7 @@ prompt_username() {
 	local var_name="$1"
 	local value
 	while true; do
-		read -p "Username (default 'Apple'): " value
+		read -r -p "Username (default 'Apple'): " value
 		value="${value:=Apple}"
 		if msg=$(validate_username "$value"); then
 			eval "$var_name=\"$value\""
@@ -330,7 +342,7 @@ prompt_password() {
 	local var_name="$1"
 	local value
 	while true; do
-		read -p "Password (default '1234'): " value
+		read -r -p "Password (default '1234'): " value
 		value="${value:=1234}"
 		if msg=$(validate_password "$value"); then
 			eval "$var_name=\"$value\""
@@ -409,7 +421,7 @@ add_to_filevault() {
 
 
 
-PB=/usr/libexec/PlistBuddy
+PB="${PB:-/usr/libexec/PlistBuddy}"
 
 suppress_enrollment() {
 	local data_mount="$1"
@@ -556,6 +568,7 @@ full_bypass_mode() {
 	echo ""
 	step "Creating temporary admin account"
 
+	local realName
 	prompt_default realName "Full name" "Apple"
 
 	local username
@@ -772,6 +785,16 @@ check_mdm_status() {
 	fi
 }
 
+_mdm_agent_names() {
+	local agent
+	for agent in "$1/"*; do
+		[ -f "$agent" ] || continue
+		if printf '%s\n' "${agent##*/}" | grep -qiE 'mdm|enrollment|managed'; then
+			printf '%s\n' "${agent##*/}"
+		fi
+	done
+}
+
 deep_status() {
 	if [ "${1:-}" = "--json" ]; then
 		deep_status_json
@@ -820,10 +843,10 @@ deep_status() {
 	for home in /Users/*/; do
 		[ -d "$home/Library/LaunchAgents" ] || continue
 		local user_agents
-		user_agents=$(ls "$home/Library/LaunchAgents/" 2>/dev/null | grep -iE "mdm|enrollment|managed" || true)
+		user_agents=$(_mdm_agent_names "$home/Library/LaunchAgents")
 		if [ -n "$user_agents" ]; then
 			echo -e "  ${YEL}$(basename "$home"):${NC}"
-			echo "$user_agents" | sed 's/^/    /'
+			while IFS= read -r agent; do printf '    %s\n' "$agent"; done <<< "$user_agents"
 			found=$((found + 1))
 		fi
 	done
@@ -832,9 +855,9 @@ deep_status() {
 
 	step "MDM LaunchDaemons (System)"
 	local sys_agents
-	sys_agents=$(ls /Library/LaunchDaemons/ 2>/dev/null | grep -iE "mdm|enrollment|managed" || true)
+	sys_agents=$(_mdm_agent_names /Library/LaunchDaemons)
 	if [ -n "$sys_agents" ]; then
-		echo "$sys_agents" | sed 's/^/  /'
+		while IFS= read -r agent; do printf '  %s\n' "$agent"; done <<< "$sys_agents"
 	else
 		info "No MDM LaunchDaemons found"
 	fi
@@ -842,9 +865,9 @@ deep_status() {
 
 	step "Running MDM Processes"
 	local procs
-	procs=$(ps aux 2>/dev/null | grep -iE "mdm|managedclient|activation" | grep -v grep || true)
+	procs=$(pgrep -il "mdm|managedclient|activation" 2>/dev/null || true)
 	if [ -n "$procs" ]; then
-		echo "$procs" | awk '{print "  " $11 " (PID " $2 ")"}'
+		echo "$procs" | awk '{print "  " $2 " (PID " $1 ")"}'
 	else
 		info "No MDM processes running"
 	fi
@@ -867,7 +890,7 @@ deep_status() {
 	step "Overall Assessment"
 	local risk="LOW"
 	[ "$(sudo profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || echo 0)" -gt 0 ] && risk="MEDIUM"
-	ps aux 2>/dev/null | grep -qiE "mdm|managedclient" && risk="HIGH"
+	pgrep -i "mdm|managedclient" >/dev/null 2>&1 && risk="HIGH"
 	[ -f "$cfg/.cloudConfigRecordFound" ] && risk="CRITICAL"
 
 	case "$risk" in
@@ -904,9 +927,7 @@ deep_status_json() {
 	json="${json}  \"mdm_certificates\": $mdm_certs,\n"
 
 	local running_procs=0
-	running_procs=$(ps aux 2>/dev/null | grep -ciE "mdm|managedclient|activation" || true)
-	running_procs=$((running_procs - 1))
-	[ "$running_procs" -lt 0 ] && running_procs=0
+	running_procs=$(pgrep -il "mdm|managedclient|activation" 2>/dev/null | awk 'END {print NR}' || true)
 	json="${json}  \"running_mdm_processes\": $running_procs,\n"
 
 	local risk="LOW"
@@ -1038,9 +1059,11 @@ install_persist_launchdaemon() {
 
 	step "Loading LaunchDaemon..."
 	if command -v launchctl &>/dev/null; then
-		launchctl load "$plist_path" 2>/dev/null \
-			&& success "LaunchDaemon loaded (will run on next boot)" \
-			|| info "LaunchDaemon will load on next boot"
+		if launchctl load "$plist_path" 2>/dev/null; then
+			success "LaunchDaemon loaded (will run on next boot)"
+		else
+			info "LaunchDaemon will load on next boot"
+		fi
 	else
 		info "launchctl not available (expected in Recovery) — will load on next boot"
 	fi
@@ -1073,7 +1096,8 @@ pf_backup_anchor() {
 	local root="$1"
 	local anchor_file="${root}${FIREWALL_ANCHOR_DIR}/${FIREWALL_ANCHOR}"
 	[ ! -f "$anchor_file" ] && return 0
-	local backup="${anchor_file}.backup.$(date +%s)"
+	local backup
+	backup="${anchor_file}.backup.$(date +%s)"
 	cp "$anchor_file" "$backup" && info "Backed up pf anchor: $backup"
 }
 
@@ -1081,7 +1105,8 @@ pf_backup_conf() {
 	local root="$1"
 	local pf_conf="${root}${FIREWALL_CONF}"
 	[ ! -f "$pf_conf" ] && return 0
-	local backup="${pf_conf}.backup.$(date +%s)"
+	local backup
+	backup="${pf_conf}.backup.$(date +%s)"
 	cp "$pf_conf" "$backup" && info "Backed up pf.conf: $backup"
 }
 
@@ -1117,10 +1142,7 @@ ANCHOR
 		if grep -q "com.unleash" "$pf_conf" 2>/dev/null; then
 			info "pf.conf already has Unleash anchor"
 		else
-			echo "" >> "$pf_conf"
-			echo "# Added by unleash — MDM block" >> "$pf_conf"
-			echo "$anchor_line" >> "$pf_conf"
-			echo "$load_line" >> "$pf_conf"
+			printf '\n%s\n%s\n%s\n' "# Added by unleash — MDM block" "$anchor_line" "$load_line" >> "$pf_conf"
 			success "pf.conf updated"
 		fi
 	else
@@ -1145,8 +1167,11 @@ ANCHOR
 
 	step "Loading pf rules..."
 	if command -v pfctl &>/dev/null; then
-		pfctl -e -f "$pf_conf" 2>/dev/null && success "pf enabled and rules loaded" \
-			|| warn "pfctl failed — try: sudo pfctl -e -f $pf_conf"
+		if pfctl -e -f "$pf_conf" 2>/dev/null; then
+			success "pf enabled and rules loaded"
+		else
+			warn "pfctl failed — try: sudo pfctl -e -f $pf_conf"
+		fi
 	else
 		warn "pfctl not available"
 	fi
@@ -1171,8 +1196,14 @@ remove_pf_mdm_block() {
 
 	local pf_conf="${root}${FIREWALL_CONF}"
 	if [ -f "$pf_conf" ]; then
-		sed -i '' '/# Added by unleash/d' "$pf_conf" 2>/dev/null || true
-		sed -i '' '/com\.unleash/d' "$pf_conf" 2>/dev/null || true
+		local tmp_conf
+		tmp_conf=$(mktemp "${pf_conf}.XXXXXX") || return 1
+		if ! cp -p "$pf_conf" "$tmp_conf" \
+			|| ! sed '/# Added by unleash/d; /com\.unleash/d' "$pf_conf" > "$tmp_conf" \
+			|| ! mv "$tmp_conf" "$pf_conf"; then
+			rm -f "$tmp_conf"
+			return 1
+		fi
 		success "pf.conf cleaned"
 	fi
 
@@ -1190,9 +1221,11 @@ pf_status() {
 	if command -v pfctl &>/dev/null; then
 		pfctl -si 2>/dev/null | grep -E "Status|Enabled" || echo "  pf not enabled"
 		echo ""
-		pfctl -a "$FIREWALL_ANCHOR" -s rules 2>/dev/null \
-			&& info "Unleash MDM anchor rules:" \
-			|| info "No Unleash MDM anchor loaded"
+		if pfctl -a "$FIREWALL_ANCHOR" -s rules 2>/dev/null; then
+			info "Unleash MDM anchor rules:"
+		else
+			info "No Unleash MDM anchor loaded"
+		fi
 	else
 		warn "pfctl not available"
 	fi
@@ -1214,8 +1247,11 @@ harden_live_os() {
 		local installed
 		installed=$(profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
 		if [ "$installed" -gt 0 ]; then
-			sudo profiles -D -F 2>/dev/null && success "Forced profile removal" \
-				|| warn "Profile removal failed"
+			if sudo profiles -D -F 2>/dev/null; then
+				success "Forced profile removal"
+			else
+				warn "Profile removal failed"
+			fi
 		else
 			info "No installed profiles to remove"
 		fi
@@ -1224,8 +1260,8 @@ harden_live_os() {
 	fi
 
 	step "Cleaning user LaunchAgents..."
-	local home
-	for home in /Users/*/; do
+	local home users_root="${1:-}/Users"
+	for home in "$users_root/"*/; do
 		[ -d "$home/Library/LaunchAgents" ] || continue
 		local cleaned=0
 		for agent in "$home/Library/LaunchAgents/"*; do
@@ -1235,8 +1271,11 @@ harden_live_os() {
 				cleaned=$((cleaned + 1))
 			fi
 		done
-		[ "$cleaned" -gt 0 ] && success "$(basename "$home"): removed $cleaned agent(s)" \
-			|| info "$(basename "$home"): clean"
+		if [ "$cleaned" -gt 0 ]; then
+			success "$(basename "$home"): removed $cleaned agent(s)"
+		else
+			info "$(basename "$home"): clean"
+		fi
 	done
 
 	step "Flushing DNS cache..."
@@ -1270,9 +1309,11 @@ harden_live_os() {
 
 	step "Disabling iCloud Private Relay (DoH source)..."
 	if command -v defaults &>/dev/null; then
-		sudo defaults write /Library/Preferences/com.apple.networkextensions.plist PrivateRelayEnabled -bool false 2>/dev/null \
-			&& success "Private Relay disabled" \
-			|| info "Private Relay not configurable (expected on some configs)"
+		if sudo defaults write /Library/Preferences/com.apple.networkextensions.plist PrivateRelayEnabled -bool false 2>/dev/null; then
+			success "Private Relay disabled"
+		else
+			info "Private Relay not configurable (expected on some configs)"
+		fi
 	fi
 
 	echo ""
@@ -1296,7 +1337,7 @@ harden_status() {
 	launchctl list 2>/dev/null | grep -iE "mdm|managed|enrollment|activation" || info "None loaded"
 
 	step "Running MDM processes..."
-	ps aux 2>/dev/null | grep -iE "mdm|managedclient|activation" | grep -v grep || info "None running"
+	pgrep -il "mdm|managedclient|activation" 2>/dev/null || info "None running"
 }
 
 MDM_BLOCKLIST="mdmenrollment.apple.com deviceenrollment.apple.com iprofiles.apple.com"
@@ -1312,7 +1353,7 @@ install_selective_block() {
   local anchor_file="${anchor_dir}/com.unleash.selective"
   mkdir -p "$anchor_dir"
 
-  > "$anchor_file"
+  : > "$anchor_file"
 
   for d in $MDM_BLOCKLIST; do
     for ip in $(host -t a "$d" 2>/dev/null | awk '/has address/{print $NF}'); do
@@ -1334,10 +1375,7 @@ install_selective_block() {
     if grep -q "com.unleash.selective" "$pf_conf" 2>/dev/null; then
       info "pf.conf already has selective anchor"
     else
-      echo "" >> "$pf_conf"
-      echo "# Added by unleash — selective MDM block (iCloud-safe)" >> "$pf_conf"
-      echo "$anchor_line" >> "$pf_conf"
-      echo "$load_line" >> "$pf_conf"
+      printf '\n%s\n%s\n%s\n' "# Added by unleash — selective MDM block (iCloud-safe)" "$anchor_line" "$load_line" >> "$pf_conf"
       success "pf.conf updated with selective rules"
     fi
   else
@@ -1357,8 +1395,11 @@ EOF
   fi
 
   if command -v pfctl &>/dev/null; then
-    pfctl -e -f "$pf_conf" 2>/dev/null && success "pf rules loaded (iCloud should work)" \
-      || warn "pfctl failed"
+    if pfctl -e -f "$pf_conf" 2>/dev/null; then
+      success "pf rules loaded (iCloud should work)"
+    else
+      warn "pfctl failed"
+    fi
   fi
 }
 
@@ -1548,9 +1589,11 @@ PLIST
   success "Monitor LaunchDaemon: $plist_path"
 
   if command -v launchctl &>/dev/null; then
-    launchctl load "$plist_path" 2>/dev/null \
-      && success "Monitor loaded (starts at boot)" \
-      || info "Will load on next boot"
+    if launchctl load "$plist_path" 2>/dev/null; then
+      success "Monitor loaded (starts at boot)"
+    else
+      info "Will load on next boot"
+    fi
   fi
 }
 
@@ -1671,7 +1714,7 @@ monitor_mdm() {
 }
 
 stop_monitor() {
-  local pidfile="/tmp/unleash-monitor.pid"
+  local pidfile="${1:-/tmp/unleash-monitor.pid}"
   if [ -f "$pidfile" ]; then
     local pid
     pid=$(cat "$pidfile")
@@ -1688,7 +1731,7 @@ stop_monitor() {
 }
 
 monitor_status() {
-  local pidfile="/tmp/unleash-monitor.pid"
+  local pidfile="${1:-/tmp/unleash-monitor.pid}"
   if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
     echo -e "${GRN}Monitor running (PID $(cat "$pidfile"))${NC}"
     tail -5 /var/log/unleash-monitor.log 2>/dev/null || echo "  (no log entries yet)"
@@ -1700,7 +1743,8 @@ monitor_status() {
 show_history() {
   header "Unleash Event History"
 
-  local logs=("/var/log/unleash-monitor.log" "/var/log/unleash-heal.log" "/var/log/unleash-monitor.err")
+  local log_dir="${1:-/var/log}"
+  local logs=("$log_dir/unleash-monitor.log" "$log_dir/unleash-heal.log" "$log_dir/unleash-monitor.err")
   local found=false
 
   for logfile in "${logs[@]}"; do
@@ -1733,7 +1777,8 @@ show_history() {
 }
 
 clear_history() {
-  local logs=("/var/log/unleash-monitor.log" "/var/log/unleash-heal.log" "/var/log/unleash-monitor.err")
+  local log_dir="${1:-/var/log}"
+  local logs=("$log_dir/unleash-monitor.log" "$log_dir/unleash-heal.log" "$log_dir/unleash-monitor.err")
   for logfile in "${logs[@]}"; do
     if [ -f "$logfile" ]; then
       : > "$logfile"
@@ -1926,7 +1971,7 @@ do_self_update() {
   fi
   end_ok; echo "     Latest: v$latest_tag"
 
-  if [ "v$latest_tag" = "$(echo "v$VERSION")" ]; then
+  if [ "v$latest_tag" = "v$VERSION" ]; then
     success "Already up to date (v$VERSION)"
     rm -rf "$tmp_dir"
     return 0
@@ -2166,9 +2211,9 @@ generate_report() {
 
   step "Running MDM Processes"
   local procs
-  procs=$(ps aux 2>/dev/null | grep -iE "mdm|managedclient|activation" | grep -v grep || true)
+  procs=$(pgrep -il "mdm|managedclient|activation" 2>/dev/null || true)
   if [ -n "$procs" ]; then
-    echo "$procs" | awk '{print "  " $11 " (PID " $2 ")"}'
+    echo "$procs" | awk '{print "  " $2 " (PID " $1 ")"}'
   else
     echo "  None"
   fi
@@ -2232,6 +2277,14 @@ generate_report_json() {
   report="${report}}"
 
   echo -e "$report"
+}
+
+_has_matching_path() {
+  local path
+  for path in "$@"; do
+    [ ! -e "$path" ] || return 0
+  done
+  return 1
 }
 
 detect_configurator_enrollment() {
@@ -2316,8 +2369,13 @@ detect_migration_assistant() {
 
     local user_agents="$home/Library/LaunchAgents"
     if [ -d "$user_agents" ]; then
-      local found
-      found=$(ls "$user_agents" 2>/dev/null | grep -ciE "mdm|enrollment|managed" || true)
+      local found=0 agent
+      for agent in "$user_agents/"*; do
+        [ -f "$agent" ] || continue
+        if printf '%s\n' "${agent##*/}" | grep -qiE 'mdm|enrollment|managed'; then
+          found=$((found + 1))
+        fi
+      done
       if [ "$found" -gt 0 ]; then
         ma_indicators=$((ma_indicators + found))
         details="$details  $user: $found MDM LaunchAgent(s)\n"
@@ -2326,9 +2384,7 @@ detect_migration_assistant() {
 
     local prefs="$home/Library/Preferences"
     if [ -d "$prefs" ]; then
-      local mdm_prefs
-      mdm_prefs=$(ls "$prefs"/com.apple.mdm* "$prefs"/com.apple.ManagedClient* 2>/dev/null | head -3 || true)
-      if [ -n "$mdm_prefs" ]; then
+      if _has_matching_path "$prefs"/com.apple.mdm* "$prefs"/com.apple.ManagedClient*; then
         ma_indicators=$((ma_indicators + 1))
         details="$details  $user: MDM preference files\n"
       fi
@@ -2342,16 +2398,12 @@ detect_migration_assistant() {
 
     local caches="$home/Library/Caches"
     if [ -d "$caches" ]; then
-      local enrollment_cache
-      enrollment_cache=$(ls "$caches"/com.apple.enrollment* 2>/dev/null | head -3 || true)
-      if [ -n "$enrollment_cache" ]; then
+      if _has_matching_path "$caches"/com.apple.enrollment*; then
         ma_indicators=$((ma_indicators + 1))
         details="$details  $user: enrollment cache files\n"
       fi
 
-      local mdmd_cache
-      mdmd_cache=$(ls "$caches"/com.apple.mdm* 2>/dev/null | head -3 || true)
-      if [ -n "$mdmd_cache" ]; then
+      if _has_matching_path "$caches"/com.apple.mdm*; then
         ma_indicators=$((ma_indicators + 1))
         details="$details  $user: MDM cache files\n"
       fi
@@ -2549,14 +2601,14 @@ RULES
   if grep -q "vpn-kill" "$pf_conf" 2>/dev/null; then
     info "pf.conf already has VPN kill-switch anchor"
   else
-    echo "" >> "$pf_conf"
-    echo "# Added by unleash — VPN kill-switch (prevents MDM leaks)" >> "$pf_conf"
-    echo "$anchor_line" >> "$pf_conf"
-    echo "$load_line" >> "$pf_conf"
+    printf '\n%s\n%s\n%s\n' "# Added by unleash — VPN kill-switch (prevents MDM leaks)" "$anchor_line" "$load_line" >> "$pf_conf"
   fi
 
-  pfctl -e -f "$pf_conf" 2>/dev/null && success "VPN kill-switch active" \
-    || warn "pfctl failed"
+  if pfctl -e -f "$pf_conf" 2>/dev/null; then
+    success "VPN kill-switch active"
+  else
+    warn "pfctl failed"
+  fi
 
   echo ""
   info "What this does:"
@@ -2814,6 +2866,7 @@ cmd_dualboot() {
 	echo ""
 	step "Creating admin account on target"
 
+	local realName
 	prompt_default realName "Full name" "Apple"
 	local username
 	prompt_username username
@@ -2828,9 +2881,7 @@ cmd_dualboot() {
 	begin "Blocking domains"
 	local hosts_file="$data_path/private/etc/hosts"
 	[ -f "$hosts_file" ] || touch "$hosts_file"
-	echo "0.0.0.0 deviceenrollment.apple.com" >>"$hosts_file"
-	echo "0.0.0.0 mdmenrollment.apple.com"    >>"$hosts_file"
-	echo "0.0.0.0 iprofiles.apple.com"        >>"$hosts_file"
+	printf '%s\n' "0.0.0.0 deviceenrollment.apple.com" "0.0.0.0 mdmenrollment.apple.com" "0.0.0.0 iprofiles.apple.com" >>"$hosts_file"
 	end_ok
 
 	begin "Resetting config profiles"

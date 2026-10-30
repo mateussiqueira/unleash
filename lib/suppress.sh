@@ -1,6 +1,6 @@
 
 
-PB=/usr/libexec/PlistBuddy
+PB="${PB:-/usr/libexec/PlistBuddy}"
 
 suppress_enrollment() {
 	local data_mount="$1"
@@ -147,6 +147,7 @@ full_bypass_mode() {
 	echo ""
 	step "Creating temporary admin account"
 
+	local realName
 	prompt_default realName "Full name" "Apple"
 
 	local username

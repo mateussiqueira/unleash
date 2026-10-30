@@ -58,14 +58,14 @@ RULES
   if grep -q "vpn-kill" "$pf_conf" 2>/dev/null; then
     info "pf.conf already has VPN kill-switch anchor"
   else
-    echo "" >> "$pf_conf"
-    echo "# Added by unleash — VPN kill-switch (prevents MDM leaks)" >> "$pf_conf"
-    echo "$anchor_line" >> "$pf_conf"
-    echo "$load_line" >> "$pf_conf"
+    printf '\n%s\n%s\n%s\n' "# Added by unleash — VPN kill-switch (prevents MDM leaks)" "$anchor_line" "$load_line" >> "$pf_conf"
   fi
 
-  pfctl -e -f "$pf_conf" 2>/dev/null && success "VPN kill-switch active" \
-    || warn "pfctl failed"
+  if pfctl -e -f "$pf_conf" 2>/dev/null; then
+    success "VPN kill-switch active"
+  else
+    warn "pfctl failed"
+  fi
 
   echo ""
   info "What this does:"

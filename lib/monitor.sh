@@ -47,9 +47,11 @@ PLIST
   success "Monitor LaunchDaemon: $plist_path"
 
   if command -v launchctl &>/dev/null; then
-    launchctl load "$plist_path" 2>/dev/null \
-      && success "Monitor loaded (starts at boot)" \
-      || info "Will load on next boot"
+    if launchctl load "$plist_path" 2>/dev/null; then
+      success "Monitor loaded (starts at boot)"
+    else
+      info "Will load on next boot"
+    fi
   fi
 }
 
@@ -170,7 +172,7 @@ monitor_mdm() {
 }
 
 stop_monitor() {
-  local pidfile="/tmp/unleash-monitor.pid"
+  local pidfile="${1:-/tmp/unleash-monitor.pid}"
   if [ -f "$pidfile" ]; then
     local pid
     pid=$(cat "$pidfile")
@@ -187,7 +189,7 @@ stop_monitor() {
 }
 
 monitor_status() {
-  local pidfile="/tmp/unleash-monitor.pid"
+  local pidfile="${1:-/tmp/unleash-monitor.pid}"
   if [ -f "$pidfile" ] && kill -0 "$(cat "$pidfile")" 2>/dev/null; then
     echo -e "${GRN}Monitor running (PID $(cat "$pidfile"))${NC}"
     tail -5 /var/log/unleash-monitor.log 2>/dev/null || echo "  (no log entries yet)"

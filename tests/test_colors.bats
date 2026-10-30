@@ -41,6 +41,13 @@ teardown() {
   echo "$output" | grep -q "Test Title"
 }
 
+@test "header draws a valid Unicode border for the title width" {
+  run header Mac
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"╔═══════╗"* ]]
+  [[ "$output" == *"╚═══════╝"* ]]
+}
+
 @test "diagnostics use stderr without contaminating helper return values" {
   local source_file
   for source_file in lib/colors.sh unleash-standalone.sh; do

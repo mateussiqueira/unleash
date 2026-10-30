@@ -1,7 +1,8 @@
 show_history() {
   header "Unleash Event History"
 
-  local logs=("/var/log/unleash-monitor.log" "/var/log/unleash-heal.log" "/var/log/unleash-monitor.err")
+  local log_dir="${1:-/var/log}"
+  local logs=("$log_dir/unleash-monitor.log" "$log_dir/unleash-heal.log" "$log_dir/unleash-monitor.err")
   local found=false
 
   for logfile in "${logs[@]}"; do
@@ -34,7 +35,8 @@ show_history() {
 }
 
 clear_history() {
-  local logs=("/var/log/unleash-monitor.log" "/var/log/unleash-heal.log" "/var/log/unleash-monitor.err")
+  local log_dir="${1:-/var/log}"
+  local logs=("$log_dir/unleash-monitor.log" "$log_dir/unleash-heal.log" "$log_dir/unleash-monitor.err")
   for logfile in "${logs[@]}"; do
     if [ -f "$logfile" ]; then
       : > "$logfile"
