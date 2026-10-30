@@ -16,7 +16,8 @@ with (root / "platform-calls.jsonl").open("a") as log:
 
 def fixture_path(value):
     path = pathlib.Path(value).resolve()
-    if not path.is_relative_to(root):
+    active_test = pathlib.Path(os.environ["BATS_TEST_TMPDIR"]).resolve()
+    if not (path.is_relative_to(root) or path.is_relative_to(active_test)):
         sys.exit(f"Fixture refused path outside the suite: {path}")
     return path
 
