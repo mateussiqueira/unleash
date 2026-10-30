@@ -12,7 +12,7 @@ harden_live_os() {
 	step "Removing residual MDM profiles..."
 	if command -v profiles &>/dev/null; then
 		local installed
-		installed=$(profiles -C -output=xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
+		installed=$(profiles -C -output stdout-xml 2>/dev/null | grep -c "ProfileDisplayName" || true)
 		if [ "$installed" -gt 0 ]; then
 			if sudo profiles -D -F 2>/dev/null; then
 				success "Forced profile removal"
