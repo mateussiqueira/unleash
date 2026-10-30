@@ -2886,6 +2886,11 @@ cmd_restore() {
 }
 
 cmd_dualboot() {
+	if [ "$DRY_RUN" = true ]; then
+		info "[DRY RUN] Would select an external macOS installation and create an admin account."
+		info "[DRY RUN] Would update its hosts file and enrollment markers."
+		return 0
+	fi
 	if ! is_root; then
 		error_exit "Dual-boot needs sudo: sudo ./unleash dualboot"
 	fi
