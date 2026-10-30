@@ -486,9 +486,9 @@ suppress_enrollment() {
 	if [ -f "$cfg/.cloudConfigRecordFound" ]; then
 		mdm_host=$(plutil -convert xml1 -o - "$cfg/.cloudConfigRecordFound" 2>/dev/null \
 			| grep -ioE 'https?://[a-z0-9._-]+' | sed -E 's#https?://##' \
-			| sort -u | grep -viE '(^|\.)apple\.com$' | head -1)
+			| sort -u | grep -viE '(^|\.)apple\.com$' | head -1 || true)
 		org=$(plutil -convert xml1 -o - "$cfg/.cloudConfigRecordFound" 2>/dev/null \
-			| grep -iA1 OrganizationName | tail -1 | sed -E 's/.*<string>(.*)<\/string>.*/\1/')
+			| grep -iA1 OrganizationName | tail -1 | sed -E 's/.*<string>(.*)<\/string>.*/\1/' || true)
 		[ -n "$org" ] && info "Device assigned in ABM to: $org"
 		[ -n "$mdm_host" ] && info "Org MDM host: $mdm_host"
 	else
