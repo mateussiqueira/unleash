@@ -1,6 +1,8 @@
 #!/bin/bash
 set -euo pipefail
 VERSION="2.0.0"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
 RED='\033[1;31m'
 GRN='\033[1;32m'
 BLU='\033[1;34m'
@@ -940,6 +942,14 @@ deep_status_json() {
 	echo -e "$json"
 }
 
+_launchd_script_path() {
+  local script_path="${SCRIPT_PATH:-}"
+  if [ -z "$script_path" ]; then
+    script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+  fi
+  printf '%s' "$script_path" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/>/\&gt;/g'
+}
+
 
 heal_suppress() {
 	local data_mount="$1"
@@ -1012,11 +1022,7 @@ install_persist_launchdaemon() {
 	root="$(_persist_mount_root "$data_mount")"
 
 	local unleash_src
-	if [ -n "$SCRIPT_DIR" ]; then
-		unleash_src="$SCRIPT_DIR/unleash"
-	else
-		unleash_src="$(cd "$(dirname "$0")" && pwd)/unleash"
-	fi
+	unleash_src=$(_launchd_script_path)
 
 	step "Installing LaunchDaemon for boot-time persistence..."
 
@@ -1035,8 +1041,8 @@ install_persist_launchdaemon() {
 		<key>ProgramArguments</key>
 		<array>
 			<string>/bin/bash</string>
-			<string>-c</string>
-			<string>${unleash_src} heal</string>
+			<string>${unleash_src}</string>
+			<string>heal</string>
 		</array>
 		<key>RunAtLoad</key>
 		<true/>
