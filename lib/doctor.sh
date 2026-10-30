@@ -7,8 +7,16 @@ _network_diagnostics() {
   fi
   printf 'macOS: %s (build %s)\n' "$version" "$build"
   case "$version" in 27.*) warn "macOS 27 hardware compatibility remains unverified (issue #22)." ;; esac
-  local interface
-  interface=$(networksetup -listallhardwareports 2>/dev/null | awk '
+  local interface ports
+  if ! command -v networksetup >/dev/null; then
+    warn "Wi-Fi diagnostics unavailable: networksetup is missing."
+    return 1
+  fi
+  if ! ports=$(networksetup -listallhardwareports 2>/dev/null); then
+    warn "Could not query Wi-Fi hardware ports."
+    return 1
+  fi
+  interface=$(printf '%s\n' "$ports" | awk '
     /Hardware Port:/ { wifi=($0 ~ /: (Wi-Fi|AirPort)$/); next }
     wifi && /^[[:space:]]*Device:/ { print $2; exit }
   ' || true)
@@ -16,11 +24,25 @@ _network_diagnostics() {
     info "No Wi-Fi hardware port reported."
     return 0
   fi
-  local power status
-  power=$(networksetup -getairportpower "$interface" 2>/dev/null || true)
+  local power status details ipv4
+  if ! power=$(networksetup -getairportpower "$interface" 2>/dev/null); then
+    warn "Could not query Wi-Fi power."
+    return 1
+  fi
+  if ! details=$(ifconfig "$interface" 2>/dev/null); then
+    warn "Could not query Wi-Fi link state."
+    return 1
+  fi
   case "$power" in *': On') power=on ;; *': Off') power=off ;; *) power=unavailable ;; esac
-  status=$(ifconfig "$interface" 2>/dev/null | awk '/^[[:space:]]*status:/ {print $2; exit}' || true)
-  printf 'Wi-Fi interface: %s\nWi-Fi power: %s\nLink status: %s\n' "$interface" "$power" "${status:-unavailable}"
+  status=$(printf '%s\n' "$details" | awk '/^[[:space:]]*status:/ {print $2; exit}' || true)
+  ipv4=$(printf '%s\n' "$details" | awk '
+    /^[[:space:]]*inet / {
+      if ($2 ~ /^169[.]254[.]/) { state="link-local"; next }
+      if ($2 != "0.0.0.0") { state="configured"; exit }
+    }
+    END { print (state ? state : "none") }
+  ')
+  printf 'Wi-Fi interface: %s\nWi-Fi power: %s\nLink status: %s\nWi-Fi IPv4: %s\n' "$interface" "$power" "${status:-unavailable}" "$ipv4"
 }
 
 run_doctor() {
