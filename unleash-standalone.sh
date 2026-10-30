@@ -234,7 +234,7 @@ resolve_data_volume() {
 	if [ -z "$id" ] || ! diskutil info "/dev/$id" >/dev/null 2>&1; then
 		warn "Auto-detection failed. Available disks:"
 		diskutil list >&2
-		echo ""
+		echo "" >&2
 		[ -t 0 ] || error_exit "Cannot select a Data volume without a terminal."
 		read -r -p "Enter Data volume identifier (e.g. disk3s1): " id </dev/tty
 		id="${id#/dev/}"
@@ -254,14 +254,14 @@ resolve_data_volume() {
 
 	if [ -z "$mount_pt" ] || [ ! -d "$mount_pt" ]; then
 		info "Not mounted — mounting..."
-		diskutil mount "$data_dev" 2>/dev/null || true
+		diskutil mount "$data_dev" >&2 || true
 		mount_pt=$(_mount_point)
 	fi
 
 	if [ -z "$mount_pt" ] || [ ! -d "$mount_pt" ]; then
 		warn "FileVault-locked — need to unlock."
 		echo -e "${YEL}Enter password of a user on this Mac (or FileVault recovery key):${NC}" >&2
-		diskutil apfs unlockVolume "$data_dev" 2>/dev/null \
+		diskutil apfs unlockVolume "$data_dev" >&2 \
 			|| error_exit "Failed to unlock. Re-run with valid credentials."
 		mount_pt=$(_mount_point)
 	fi
