@@ -282,7 +282,7 @@ cmd_dualboot() {
 	end_ok
 
 	info "User: $username"
-	info "Pass: $passw"
+	info "Log in with the password entered above."
 	info "Boot the target and login."
 }
 
