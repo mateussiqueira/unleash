@@ -1,0 +1,123 @@
+# probe.sh — read-only fingerprint of macOS version + MDM enrollment mechanism.
+# Produces a version-aware compatibility verdict so other commands can adapt to
+# what Apple changes between releases. This module never writes to any volume.
+
+PB="${PB:-/usr/libexec/PlistBuddy}"
+
+# Codename per macOS major. Data lives here so the command and its tests share
+# one source of truth; extend it as Apple ships new majors.
+probe_codename() {
+	case "${1:-}" in
+		15) echo "Sequoia" ;;
+		26) echo "Tahoe" ;;
+		*)  echo "unknown" ;;
+	esac
+}
+
+# Compatibility verdict per macOS major:
+#   supported = confirmed on real hardware
+#   testing   = validation in progress on this major
+#   untested  = no confirmed run yet
+probe_compat() {
+	case "${1:-}" in
+		15) echo "supported" ;;
+		26) echo "testing" ;;
+		*)  echo "untested" ;;
+	esac
+}
+
+_systemversion_plist() {
+	echo "${1%/}/System/Library/CoreServices/SystemVersion.plist"
+}
+
+# probe_macos_version <volume_root> -> "<product>|<build>" on stdout.
+# Reads the target volume's plist (the only version source in Recovery, where
+# sw_vers reports the Recovery OS, not the installed one). Non-zero if absent.
+probe_macos_version() {
+	local root="${1:-/}" plist product build
+	plist="$(_systemversion_plist "$root")"
+	[ -f "$plist" ] || return 1
+	product="$($PB -c "Print :ProductVersion" "$plist" 2>/dev/null)" || return 1
+	[ -n "$product" ] || return 1
+	build="$($PB -c "Print :ProductBuildVersion" "$plist" 2>/dev/null || true)"
+	echo "${product}|${build}"
+}
+
+# probe_macos_major <version> -> integer major (26 from 26.1.2). Non-zero if the
+# leading field is not numeric.
+probe_macos_major() {
+	local major="${1:-}"
+	major="${major%%.*}"
+	case "$major" in
+		''|*[!0-9]*) return 1 ;;
+	esac
+	echo "$major"
+}
+
+# probe_enrollment <volume_root> -> dep | profiles | none (read-only).
+# Inspects marker files only; changes nothing.
+probe_enrollment() {
+	local root="${1:-/}"
+	root="${root%/}"
+	local settings="$root/private/var/db/ConfigurationProfiles/Settings"
+	if [ -f "$settings/.cloudConfigRecordFound" ] \
+		|| [ -f "$settings/.cloudConfigHasActivationRecord" ]; then
+		echo "dep"
+		return 0
+	fi
+	local store="$root/private/var/db/ConfigurationProfiles/Store"
+	if [ -d "$store" ] && [ -n "$(ls -A "$store" 2>/dev/null)" ]; then
+		echo "profiles"
+		return 0
+	fi
+	echo "none"
+}
+
+# cmd_probe [--json] [volume_root] — report version + enrollment + verdict.
+# Defaults to "/" (running system); pass a mounted volume in Recovery.
+cmd_probe() {
+	local json=false root="/" arg
+	for arg in "$@"; do
+		case "$arg" in
+			--json) json=true ;;
+			'') : ;;
+			*) root="$arg" ;;
+		esac
+	done
+
+	local ver product="unknown" build="" major="" codename compat enroll
+	if ver="$(probe_macos_version "$root")"; then
+		product="${ver%%|*}"
+		build="${ver#*|}"
+		major="$(probe_macos_major "$product" || true)"
+	fi
+	codename="$(probe_codename "$major")"
+	compat="$(probe_compat "$major")"
+	enroll="$(probe_enrollment "$root")"
+
+	if [ "$json" = true ]; then
+		printf '{"macos_version":"%s","macos_build":"%s","macos_major":"%s","codename":"%s","enrollment":"%s","compat":"%s"}\n' \
+			"$product" "$build" "$major" "$codename" "$enroll" "$compat"
+		return 0
+	fi
+
+	header "macOS / MDM Probe"
+
+	step "macOS version"
+	info "  Version : $product${build:+ (build $build)}"
+	info "  Major   : ${major:-unknown} ($codename)"
+
+	step "Enrollment mechanism"
+	case "$enroll" in
+		dep)      warn "  DEP activation record present (device is org-assigned)" ;;
+		profiles) warn "  Configuration profiles present" ;;
+		*)        success "  No DEP record or profiles detected" ;;
+	esac
+
+	step "Compatibility"
+	case "$compat" in
+		supported) success "  $codename ($major) — verified on real hardware" ;;
+		testing)   warn "  $codename ($major) — validation in progress; run on real hardware and report results" ;;
+		*)         warn "  macOS major '${major:-unknown}' — untested; proceed with caution" ;;
+	esac
+}
