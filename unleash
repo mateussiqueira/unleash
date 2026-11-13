@@ -187,6 +187,7 @@ cmd_bypass() {
 		header "Full MDM Bypass"
 		local data_mount
 		data_mount=$(resolve_data_volume)
+		probe_gate "$data_mount" || return 1
 		full_bypass_mode "$data_mount"
 	else
 		error_exit "Full bypass must run from Recovery mode."
@@ -201,6 +202,7 @@ cmd_suppress() {
 	header "Suppress Enrollment"
 	local data_mount
 	data_mount=$(resolve_data_volume)
+	probe_gate "$data_mount" || return 1
 	suppress_only_mode "$data_mount"
 }
 

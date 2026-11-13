@@ -96,3 +96,33 @@ EOF
   after="$(find "$root" -type f | sort)"
   [ "$before" = "$after" ]
 }
+
+@test "probe_gate proceeds without prompting on a supported macOS" {
+  local root="$BATS_TEST_TMPDIR/vol"
+  make_sysversion "$root" "15.5" "24F74"
+  run probe_gate "$root"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"supported"* ]]
+}
+
+@test "probe_gate warns but proceeds on Tahoe when non-interactive" {
+  local root="$BATS_TEST_TMPDIR/vol"
+  make_sysversion "$root" "26.0" "25A123"
+  run probe_gate "$root"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"under validation"* ]]
+}
+
+@test "probe_gate flags an unknown macOS as untested" {
+  run probe_gate "$BATS_TEST_TMPDIR/empty"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *"untested"* ]]
+}
+
+@test "probe_gate aborts when the user declines on an untested version" {
+  _probe_interactive() { return 0; }
+  confirm() { return 1; }
+  run probe_gate "$BATS_TEST_TMPDIR/empty"
+  [ "$status" -ne 0 ]
+  [[ "$output" == *"Aborted"* ]]
+}

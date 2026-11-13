@@ -121,3 +121,54 @@ cmd_probe() {
 		*)         warn "  macOS major '${major:-unknown}' — untested; proceed with caution" ;;
 	esac
 }
+
+# True only when a confirmation prompt makes sense: not a dry run and stdin is a
+# terminal. Split out so tests can force the interactive path.
+_probe_interactive() {
+	[ "${DRY_RUN:-false}" != true ] && [ -t 0 ]
+}
+
+# probe_gate <data_mount> — version-aware guard for destructive commands.
+# Resolves the System volume (for the macOS version) from the given Data mount,
+# reports the compatibility verdict, and asks to confirm before continuing on an
+# unverified version. Returns non-zero only when the user declines. Read-only.
+probe_gate() {
+	local mount="${1:-/}" sysroot sysvol="" ver product="" major="" codename verdict
+	sysroot="$mount"
+	if command -v detect_system_volume >/dev/null 2>&1; then
+		sysvol="$(detect_system_volume "$mount" 2>/dev/null || true)"
+		[ -n "$sysvol" ] && [ -d "/Volumes/$sysvol/System" ] && sysroot="/Volumes/$sysvol"
+	fi
+
+	if ver="$(probe_macos_version "$sysroot")"; then
+		product="${ver%%|*}"
+		major="$(probe_macos_major "$product" || true)"
+	else
+		product="unknown"
+	fi
+	codename="$(probe_codename "$major")"
+	verdict="$(probe_compat "$major")"
+
+	case "$verdict" in
+		supported)
+			success "macOS $major ($codename) — supported by unleash"
+			return 0
+			;;
+		testing)
+			warn "macOS $major ($codename) — compatibility under validation"
+			;;
+		*)
+			warn "macOS $product — untested by unleash; behavior unverified"
+			;;
+	esac
+
+	if ! _probe_interactive; then
+		info "Proceeding without confirmation (dry run or non-interactive)."
+		return 0
+	fi
+	if confirm "Proceed on this macOS version anyway?"; then
+		return 0
+	fi
+	warn "Aborted: macOS version not confirmed."
+	return 1
+}
