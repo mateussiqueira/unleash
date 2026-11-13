@@ -73,6 +73,31 @@ probe_enrollment() {
 	echo "none"
 }
 
+# probe_dep_detail <volume_root> -> "<org>|<mdm_host>" (either field may be
+# empty). Read-only parse of the cached DEP activation record. Mirrors the
+# extraction in suppress.sh; kept local to avoid refactoring that module here.
+probe_dep_detail() {
+	local root="${1:-/}"
+	root="${root%/}"
+	local rec="$root/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordFound"
+	[ -f "$rec" ] || { echo "|"; return 1; }
+	local org mdm_host
+	org=$(plutil -convert xml1 -o - "$rec" 2>/dev/null \
+		| grep -iA1 OrganizationName | tail -1 | sed -E 's/.*<string>(.*)<\/string>.*/\1/' || true)
+	mdm_host=$(plutil -convert xml1 -o - "$rec" 2>/dev/null \
+		| grep -ioE 'https?://[a-z0-9._-]+' | sed -E 's#https?://##' \
+		| sort -u | grep -viE '(^|\.)apple\.com$' | head -1 || true)
+	echo "${org}|${mdm_host}"
+}
+
+# probe_suppressed <volume_root> -> 0 when unleash bypass markers are already in
+# place. Read-only.
+probe_suppressed() {
+	local root="${1:-/}"
+	root="${root%/}"
+	[ -f "$root/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordNotFound" ]
+}
+
 # cmd_probe [--json] [volume_root] — report version + enrollment + verdict.
 # Defaults to "/" (running system); pass a mounted volume in Recovery.
 cmd_probe() {
@@ -95,9 +120,17 @@ cmd_probe() {
 	compat="$(probe_compat "$major")"
 	enroll="$(probe_enrollment "$root")"
 
+	local org="" mdm_host="" detail suppressed="no"
+	if [ "$enroll" = dep ]; then
+		detail="$(probe_dep_detail "$root" || true)"
+		org="${detail%%|*}"
+		mdm_host="${detail#*|}"
+	fi
+	if probe_suppressed "$root"; then suppressed="yes"; fi
+
 	if [ "$json" = true ]; then
-		printf '{"macos_version":"%s","macos_build":"%s","macos_major":"%s","codename":"%s","enrollment":"%s","compat":"%s"}\n' \
-			"$product" "$build" "$major" "$codename" "$enroll" "$compat"
+		printf '{"macos_version":"%s","macos_build":"%s","macos_major":"%s","codename":"%s","enrollment":"%s","org":"%s","mdm_host":"%s","suppressed":"%s","compat":"%s"}\n' \
+			"$product" "$build" "$major" "$codename" "$enroll" "$org" "$mdm_host" "$suppressed" "$compat"
 		return 0
 	fi
 
@@ -109,10 +142,19 @@ cmd_probe() {
 
 	step "Enrollment mechanism"
 	case "$enroll" in
-		dep)      warn "  DEP activation record present (device is org-assigned)" ;;
+		dep)      warn "  DEP activation record present (device is org-assigned)"
+		          [ -n "$org" ] && info "  Assigned to : $org"
+		          [ -n "$mdm_host" ] && info "  Org MDM host: $mdm_host" ;;
 		profiles) warn "  Configuration profiles present" ;;
 		*)        success "  No DEP record or profiles detected" ;;
 	esac
+
+	step "Suppression state"
+	if [ "$suppressed" = yes ]; then
+		success "  unleash bypass markers present (already suppressed)"
+	else
+		info "  No unleash bypass markers (enrollment untouched)"
+	fi
 
 	step "Compatibility"
 	case "$compat" in

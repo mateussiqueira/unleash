@@ -5,6 +5,23 @@ setup() {
   load '../lib/probe.sh'
 }
 
+# Write a cached DEP activation record fixture under a fake volume root.
+make_dep_record() {
+  local root="$1" org="$2" host="$3"
+  local dir="$root/private/var/db/ConfigurationProfiles/Settings"
+  mkdir -p "$dir"
+  cat > "$dir/.cloudConfigRecordFound" <<EOF
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>OrganizationName</key><string>$org</string>
+  <key>ConfigurationURL</key><string>https://$host/enroll</string>
+</dict>
+</plist>
+EOF
+}
+
 # Write a SystemVersion.plist fixture under a fake volume root.
 make_sysversion() {
   local root="$1" product="$2" build="$3"
@@ -125,4 +142,43 @@ EOF
   run probe_gate "$BATS_TEST_TMPDIR/empty"
   [ "$status" -ne 0 ]
   [[ "$output" == *"Aborted"* ]]
+}
+
+@test "probe_dep_detail extracts the org and MDM host from the DEP record" {
+  local root="$BATS_TEST_TMPDIR/vol"
+  make_dep_record "$root" "Example Corp" "mdm.example.org"
+  run probe_dep_detail "$root"
+  [ "$status" -eq 0 ]
+  [ "$output" = "Example Corp|mdm.example.org" ]
+}
+
+@test "probe_dep_detail returns empty fields without a record" {
+  run probe_dep_detail "$BATS_TEST_TMPDIR/empty"
+  [ "$status" -ne 0 ]
+  [ "$output" = "|" ]
+}
+
+@test "probe_suppressed is true when the bypass marker is present" {
+  local root="$BATS_TEST_TMPDIR/vol"
+  mkdir -p "$root/private/var/db/ConfigurationProfiles/Settings"
+  touch "$root/private/var/db/ConfigurationProfiles/Settings/.cloudConfigRecordNotFound"
+  run probe_suppressed "$root"
+  [ "$status" -eq 0 ]
+}
+
+@test "probe_suppressed is false on an untouched volume" {
+  run probe_suppressed "$BATS_TEST_TMPDIR/clean"
+  [ "$status" -ne 0 ]
+}
+
+@test "cmd_probe --json surfaces org, mdm_host and suppressed for a DEP device" {
+  local root="$BATS_TEST_TMPDIR/vol"
+  make_sysversion "$root" "26.0" "25A123"
+  make_dep_record "$root" "Example Corp" "mdm.example.org"
+  run cmd_probe --json "$root"
+  [ "$status" -eq 0 ]
+  [[ "$output" == *'"enrollment":"dep"'* ]]
+  [[ "$output" == *'"org":"Example Corp"'* ]]
+  [[ "$output" == *'"mdm_host":"mdm.example.org"'* ]]
+  [[ "$output" == *'"suppressed":"no"'* ]]
 }
