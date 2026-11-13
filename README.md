@@ -343,6 +343,30 @@ The hosts file can be bypassed by DNS-over-HTTPS or cached DNS. pf (packet filte
 
 On Apple Silicon, all writes target the Data volume. The system volume is never modified. SIP does not need to be disabled.
 
+## Compatibility
+
+`unleash` tracks compatibility per macOS release, because Apple changes the
+activation and enrollment flow between versions. Run `./unleash probe` to read
+the verdict for the macOS actually installed on the target volume.
+
+| macOS | Codename | Status | Notes |
+|---|---|---|---|
+| 15 | Sequoia | Supported | Verified on real hardware |
+| 26 | Tahoe | Under validation | Technique applies; confirming on hardware |
+| other | — | Untested | No confirmed run; `bypass` / `suppress` ask to confirm first |
+
+**Status meanings**
+
+- **Supported** — confirmed working on real hardware.
+- **Under validation** — the technique applies but is still being verified on
+  that release. `bypass` and `suppress` warn before running.
+- **Untested** — no confirmed run. On an untested macOS, `bypass` and `suppress`
+  ask for confirmation, and proceed automatically only in dry-run or
+  non-interactive mode.
+
+The table mirrors the verdicts in `lib/probe.sh`. When a release is confirmed on
+hardware, move it to **Supported** both there and here in the same change.
+
 ## Migration Assistant failure
 
 This is the most common reason MDM comes back.

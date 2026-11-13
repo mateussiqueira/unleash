@@ -85,6 +85,30 @@ Firewall pf (comandos `firewall`/`whitelist`) pega o que o `/etc/hosts` não con
 | FileVault | Suportado | Suportado |
 | Migration Assistant | Menos risco | **Traz MDM de volta** |
 
+## Compatibilidade
+
+O `unleash` acompanha a compatibilidade por versão do macOS, porque a Apple muda
+o fluxo de ativação e inscrição entre as versões. Rode `./unleash probe` para ler
+o veredito da versão instalada no volume-alvo.
+
+| macOS | Codinome | Status | Observações |
+|---|---|---|---|
+| 15 | Sequoia | Suportado | Confirmado em hardware real |
+| 26 | Tahoe | Em validação | Técnica se aplica; confirmando em hardware |
+| outras | — | Não testado | Sem execução confirmada; `bypass` / `suppress` pedem confirmação antes |
+
+**O que cada status significa**
+
+- **Suportado** — confirmado funcionando em hardware real.
+- **Em validação** — a técnica se aplica, mas ainda está sendo verificada naquela
+  versão. `bypass` e `suppress` avisam antes de rodar.
+- **Não testado** — sem execução confirmada. Numa versão não testada, `bypass` e
+  `suppress` pedem confirmação, e seguem sozinhos só em dry-run ou modo
+  não-interativo.
+
+A tabela espelha os vereditos em `lib/probe.sh`. Quando uma versão for confirmada
+em hardware, mova para **Suportado** lá e aqui na mesma mudança.
+
 ## Migration Assistant
 
 Se você migrar de um Intel para Apple Silicon, o MDM vai voltar após o reboot. O Migration Assistant copia artefatos de usuário que os scripts antigos não limpam. O Unleash limpa `/Users/*/Library` explicitamente.
