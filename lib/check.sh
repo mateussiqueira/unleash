@@ -33,7 +33,7 @@ run_preformat_check() {
   if command -v profiles &>/dev/null; then
     local enroll_state
     enroll_state=$(sudo profiles status -type enrollment 2>/dev/null || true)
-    if echo "$enroll_state" | grep -qi "enrolled"; then
+    if echo "$enroll_state" | grep -qi "Yes"; then
       echo -e "  ${RED}Device is enrolled in MDM${NC}"
       clean=false
     else
